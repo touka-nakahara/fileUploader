@@ -15,7 +15,7 @@ func TestNewServer(t *testing.T) {
 
 	m := NewMockFileRepository(ctrl)
 
-	m.EXPECT().GetAll(gomock.Any()).Return(dummy.DummyFiles, nil)
+	m.EXPECT().GetAll(gomock.Any(), gomock.Any()).Return(dummy.DummyFiles, nil)
 	tests := []struct {
 		name string
 	}{
@@ -24,7 +24,7 @@ func TestNewServer(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
-			files, _ := m.GetAll(ctx)
+			files, _ := m.GetAll(ctx, nil)
 			for _, file := range files {
 				fmt.Printf("File ID: %d, Name: %s, Size: %d, Extension: %s, Description: %s\n",
 					file.ID, file.Name, file.Size, file.Extension, file.Description)

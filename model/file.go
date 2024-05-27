@@ -2,7 +2,7 @@ package model
 
 import "time"
 
-type FileID int
+type FileID string
 
 type File struct {
 	ID          FileID `json:"id"`

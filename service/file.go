@@ -5,29 +5,39 @@ import (
 	"context"
 	"fileUploader/model"
 	"fileUploader/repository"
+	"net/url"
 )
 
 type FileService interface {
-	GetFileListService(ctx context.Context) ([]*model.File, error)
+	GetFileListService(ctx context.Context, queryParams url.Values) ([]*model.File, error)
 	GetFileService(ctx context.Context, fileID model.FileID) (*model.File, error)
-	PostFileService(ctx context.Context, file *model.File) error
 	DeleteFileService(ctx context.Context, fileID model.FileID) error
+
+	GetFileDownloadService(ctx context.Context, fileID model.FileID) (*model.FileBlob, error)
+	GetFilesDownloadService(ctx context.Context, fileID model.FileID) ([]*model.FileBlob, error)
+
+	PostFilesService(ctx context.Context, file []*model.File, fileBlob []*model.FileBlob) error
+	PostFileService(ctx context.Context, file *model.File, fileBlob *model.FileBlob) error
 }
 
 type fileService struct {
 	// データベースアクセスを外部から注入
-	fileRepository repository.FileRepository
+	fileRepository     repository.FileRepository
+	fileBlobRepository repository.FileBlobRepository
 }
 
 var _ FileService = (*fileService)(nil)
 
-func NewFileService(repo repository.FileRepository) *fileService {
+func NewFileService(fileRepo repository.FileRepository, fileBlobRepo repository.FileBlobRepository) *fileService {
 	// 注入
-	return &fileService{fileRepository: repo}
+	return &fileService{
+		fileRepository:     fileRepo,
+		fileBlobRepository: fileBlobRepo,
+	}
 }
 
-func (s *fileService) GetFileListService(ctx context.Context) ([]*model.File, error) {
-	files, err := s.fileRepository.GetAll(ctx)
+func (s *fileService) GetFileListService(ctx context.Context, queryPrams url.Values) ([]*model.File, error) {
+	files, err := s.fileRepository.GetAll(ctx, queryPrams)
 	if err != nil {
 		return nil, err
 	}
@@ -42,8 +52,11 @@ func (s *fileService) GetFileService(ctx context.Context, fileID model.FileID) (
 	return file, nil
 }
 
-func (s *fileService) PostFileService(ctx context.Context, file *model.File) error {
+func (s *fileService) PostFileService(ctx context.Context, file *model.File, fileBlob *model.FileBlob) error {
 	if err := s.fileRepository.Add(ctx, file); err != nil {
+		return err
+	}
+	if err := s.fileBlobRepository.Add(ctx, fileBlob); err != nil {
 		return err
 	}
 	return nil

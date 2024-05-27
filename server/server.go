@@ -28,18 +28,18 @@ func NewServer() {
 	// GET /
 	r.Handle("GET /", http.FileServer(http.Dir("static/root")))
 	// GET /files/id
-	// POST /files
+	// POST /files/new
 	// PUT /files/id
-
+	
 	// GET /signin
 	// GET /signup
-
+	
 	// API
-
-	// GET /?
-
+	
+	// GET /files?
+	
 	// GET /files/id
-	// GET /files/new
+	// POST /files
 	// GET files/id/download
 	// GET files/download?
 	// DELETE /files/id
