@@ -1,0 +1,27 @@
+name: file_uploader
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      - "MYSQL_ROOT_HOST=%"
+      - "MYSQL_ROOT_PASSWORD=root"
+    volumes:
+      - file_uloader_sql:/var/lib/mysql
+      - ./sql/init:/docker-entrypoint-initdb.d
+      - ./sql/conf.d:/etc/mysql/conf.d
+    ports:
+      - "3307:3306"
+    networks:
+      - my-network
+    deploy:
+      # リソース制限
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1g
+
+networks:
+  my-network:
+
+volumes:
+  file_uloader_sql:
