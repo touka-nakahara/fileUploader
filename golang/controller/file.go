@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fileUploader/model"
 	"fileUploader/service"
+	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 )
@@ -18,6 +20,11 @@ func NewFileController(service service.FileService) *fileController {
 
 // GET /files, GET/files?
 func (c *fileController) GetFileListHandler(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
 	queryParams := r.URL.Query()
 
 	files, err := c.service.GetFileListService(r.Context(), queryParams)
@@ -39,6 +46,11 @@ func (c *fileController) GetFileListHandler(w http.ResponseWriter, r *http.Reque
 
 // GET /files/id
 func (c *fileController) GetFileHandler(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
 	pathParam := r.PathValue("id")
 	fileID, err := strconv.Atoi(pathParam)
 	if err != nil {
@@ -71,16 +83,47 @@ func (c *fileController) GetFileHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 func (c *fileController) PostFileHandler(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
 	type Message struct {
 		File model.File     `json:"file"`
 		Data model.FileBlob `json:"data"`
 	}
 	var m Message
 
-	if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
-		errorHandler(w, r, 400, err.Error())
+	//TODO マジックナンバー
+	const MaxUploadSize = 1024 * 1024 * 500
+
+	// ファイルサイズを制限
+	r.Body = http.MaxBytesReader(w, r.Body, MaxUploadSize)
+	if err := r.ParseMultipartForm(MaxUploadSize); err != nil {
+		http.Error(w, "500MB以下のファイルを選択してください。", http.StatusBadRequest)
+	}
+
+	file := r.FormValue("file")
+	fmt.Println(file)
+	err := json.Unmarshal([]byte(file), &m.File)
+	if err != nil {
+		errorHandler(w, r, 500, err.Error())
+	}
+
+	data, _, err := r.FormFile("data")
+	if err != nil {
+		http.Error(w, "Unable to retrieve file", http.StatusBadRequest)
 		return
 	}
+	defer data.Close()
+
+	fileData, err := io.ReadAll(data)
+	if err != nil {
+		http.Error(w, "Unable to retrieve file", http.StatusBadRequest)
+		return
+	}
+
+	m.Data.Data = fileData
 
 	//TODO 2つのテーブル間のinsertどちらも成功しないといけない
 	if err := c.service.PostFileService(r.Context(), &m.File, &m.Data); err != nil {
@@ -93,6 +136,11 @@ func (c *fileController) PostFileHandler(w http.ResponseWriter, r *http.Request)
 
 // GET files/id/download
 func (c *fileController) GetFileDownloadHandler(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
 	// どこのファイルをダウンロードするか確認
 	pathParam := r.PathValue("id")
 	fileID, err := strconv.Atoi(pathParam)
@@ -124,13 +172,17 @@ func (c *fileController) GetFileDownloadHandler(w http.ResponseWriter, r *http.R
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
 	var res Response = Response{
-		Message: "OK",
-		Data:    fileData,
+		Data: fileData,
 	}
 	json.NewEncoder(w).Encode(res)
 }
 
 func (c *fileController) DeleteFileHandler(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
 	// どこのファイルを削除するか確認
 	pathParam := r.PathValue("id")
 	fileID, err := strconv.Atoi(pathParam)

@@ -3,9 +3,11 @@ package service
 // このファイルはDBとAPIの境界線の接続を担当する
 import (
 	"context"
+	"errors"
 	"fileUploader/model"
 	"fileUploader/repository"
 	"net/url"
+	"time"
 )
 
 type FileService interface {
@@ -36,6 +38,12 @@ func NewFileService(fileRepo repository.FileRepository) *fileService {
 
 func (s *fileService) GetFileListService(ctx context.Context, queryPrams url.Values) ([]*model.File, error) {
 	files, err := s.fileRepository.GetAll(ctx, queryPrams)
+	for _, file := range files {
+		if file.Password != "" {
+			file.HasPassword = true
+			file.Password = ""
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -43,7 +51,17 @@ func (s *fileService) GetFileListService(ctx context.Context, queryPrams url.Val
 }
 
 func (s *fileService) GetFileService(ctx context.Context, fileID model.FileID) (*model.File, error) {
+
 	file, err := s.fileRepository.Get(ctx, fileID)
+	if file.Password != "" {
+		file.HasPassword = true
+		file.Password = ""
+	}
+	// 有効期限チェック
+	if file.IsAvailable.Before(time.Now()) {
+		return nil, errors.New("file is not available")
+	}
+
 	if err != nil {
 		return nil, err
 	}

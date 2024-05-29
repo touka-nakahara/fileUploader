@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fileUploader/api"
+	mq "fileUploader/infra/db/mysql"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -21,8 +23,13 @@ func NewServer() {
 	defer stop()
 
 	//TODO Logハンドラ設定
-	//TODO ルーティング設定
-	r := api.NewRouter()
+
+	db, err := mq.Connect()
+	if err != nil {
+		// LOG ハンドラ設定
+		log.Fatalf("%v", err)
+	}
+	r := api.NewRouter(db)
 
 	// サーバー作成
 	server := http.Server{

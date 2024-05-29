@@ -1,15 +1,18 @@
 package api
 
 import (
+	"database/sql"
 	"fileUploader/controller"
+	mq "fileUploader/infra/db/mysql"
 	"fileUploader/service"
 	"net/http"
 )
 
-func NewRouter() *http.ServeMux {
+func NewRouter(db *sql.DB) *http.ServeMux {
 	// DB接続
 	// コントローラー作成
-	s := service.NewFileService(nil)
+	connection := mq.NewFileDB(db)
+	s := service.NewFileService(connection)
 	fileController := controller.NewFileController(s)
 
 	r := http.NewServeMux()
@@ -18,25 +21,22 @@ func NewRouter() *http.ServeMux {
 
 	// GET /
 	r.Handle("GET /", http.FileServer(http.Dir("static/root")))
-	// GET /files/id
-	r.Handle("GET /{id}", http.FileServer(http.Dir("static/files/id")))
-	// POST /files/new
-	r.Handle("GET /{id}", http.FileServer(http.Dir("static/files/new")))
+	// TODO 何がきてもindexへredirectする (api以外は)
 
 	// API
 
-	// GET /files?
+	// GET /files? (get list)
 	r.HandleFunc("GET /api/files", fileController.GetFileListHandler)
-	// GET /files/id
-	r.HandleFunc("GET /api/files/id", fileController.GetFileHandler)
-	// GET files/id/download
-	r.HandleFunc("GET /api/files/id/download", fileController.GetFileDownloadHandler)
-	// POST /files
+	// GET /files/id (get detail)
+	r.HandleFunc("GET /api/files/{id}", fileController.GetFileHandler)
+	// POST files/id/download (download)
+	r.HandleFunc("POST /api/files/{id}/download", fileController.GetFileDownloadHandler)
+	// POST /files (upload)
 	r.HandleFunc("POST /api/files", fileController.PostFileHandler)
-	// PUT /files/id
+	// PUT /files/id (change)
 	r.HandleFunc("PUT /api/files", fileController.PutFileHandler)
-	// DELETE /files/id
-	r.HandleFunc("DELETE /api/files/id", fileController.DeleteFileHandler)
+	// DELETE /files/id (delte)
+	r.HandleFunc("POST /api/files/{id}", fileController.DeleteFileHandler)
 
 	return r
 }

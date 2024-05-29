@@ -20,6 +20,8 @@ type File struct {
 	IsAvailable time.Time `json:"is_available"`
 	UpdateDate  time.Time `json:"update_date"`
 	UploadDate  time.Time `json:"upload_date"`
+
+	HasPassword bool `json:"has_password"`
 }
 
 type FileBlob struct {

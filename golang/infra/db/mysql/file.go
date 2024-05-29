@@ -137,7 +137,7 @@ func (d *fileDB) Get(ctx context.Context, id model.FileID) (*model.File, error) 
 }
 
 func (d *fileDB) GetData(ctx context.Context, id model.FileID) (*model.FileBlob, error) {
-	query := "SELECT id, file_id, data FROM file.Data WHERE file_id = ?"
+	query := "SELECT id, data FROM file.Data WHERE file_id = ?"
 	row := d.connection.QueryRowContext(ctx, query, id)
 	file := new(model.FileBlob)
 	err := row.Scan(
