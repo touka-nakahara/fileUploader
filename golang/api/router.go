@@ -6,21 +6,32 @@ import (
 	"fileUploader/controller"
 	mq "fileUploader/infra/db/mysql"
 	"fileUploader/service"
+	"log"
 	"log/slog"
 	"net/http"
+	"os"
+	"strconv"
 )
 
 func NewRouter(db *sql.DB, httpLogger *slog.Logger) http.Handler {
 
 	connection := mq.NewFileDB(db)
 	s := service.NewFileService(connection)
-	fileController := controller.NewFileController(s)
+
+	//RV nakaharaY こんなところにいるはずもないのに
+	maxUploadSize, err := strconv.ParseInt(os.Getenv("MAX_UPLOAD_SIZE"), 10, 64)
+	if err != nil {
+		log.Fatal(err)
+
+	}
+	fileConfig := controller.FileControllerConfig{MaxUploadSize: maxUploadSize}
+	fileController := controller.NewFileController(s, &fileConfig)
 
 	r := http.NewServeMux()
 
 	// GET /
-	//RV いらないかも ( 静的ファイルとしてbuildできなくなった )
-	r.Handle("GET /", http.FileServer(http.Dir("static/root")))
+	//RV 静的ファイルとしてbuildできない
+	// r.Handle("GET /", http.FileServer(http.Dir("static/root")))
 
 	// API
 	//RV nakaharaY ハンドラ名メソッドに紐づけるとズレた時めんどいのでやめるべき

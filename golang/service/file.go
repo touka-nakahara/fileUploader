@@ -12,6 +12,12 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// RV nakaharaY ほんとにここか？ どこならいいのかわからないやつ
+var ErrFileNotFound = errors.New("ファイルが見つかりません")
+var ErrInvalidRequest = errors.New("不明なリクエストです")
+var ErrUnmatchPassword = errors.New("パスワードが違います")
+var ErrServerIntarnal = errors.New("サーバー内部エラーです")
+
 type FileService interface {
 	GetFileListService(ctx context.Context, queryParams url.Values) ([]*model.File, error)
 	GetFileService(ctx context.Context, fileID model.FileID) (*model.File, error)
@@ -66,7 +72,7 @@ func (s *fileService) GetFileService(ctx context.Context, fileID model.FileID) (
 	// 有効期限チェック
 	//RV 　DB側では有効期限チェックをしていないのはいいのだろうか？
 	if file.IsAvailable.Before(time.Now()) {
-		return nil, errors.New("ファイルが見つかりません")
+		return nil, ErrFileNotFound
 	}
 
 	// パスワードを削除
@@ -100,6 +106,11 @@ func (s *fileService) DeleteFileService(ctx context.Context, fileID model.FileID
 		}
 	}
 
+	// 有効期限チェック
+	if file.IsAvailable.Before(time.Now()) {
+		return ErrFileNotFound
+	}
+
 	if err := s.fileRepository.Delete(ctx, fileID); err != nil {
 		return err
 	}
@@ -116,7 +127,7 @@ func (s *fileService) GetFileDownloadService(ctx context.Context, fileID model.F
 
 	// 有効期限チェック
 	if file.IsAvailable.Before(time.Now()) {
-		return nil, errors.New("ファイルが見つかりません")
+		return nil, ErrFileNotFound
 	}
 
 	if file.Password != "" {

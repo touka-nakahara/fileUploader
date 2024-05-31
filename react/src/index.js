@@ -14,9 +14,11 @@ export async function filesLoader() {
   // ここにFetchを書くってことか
 
   //TODO マジックナンバーをConfigに
+
   const response = await fetch("http://127.0.0.1:8888/api/files");
 
   if (!response.ok) {
+    // サーバーエラーが起きた場合
     throw new Response("Failed to fetch data", { status: response.status });
   }
 
@@ -25,9 +27,8 @@ export async function filesLoader() {
   return { files };
 }
 
-// fileLoaderが撮ってきたデータの真部分集合だからこれは本質的には意味のないFetch
+//RV nakaharaY fileLoaderがとってきたデータの真部分集合だからこれはデータ的には意味のないFetch
 export async function fileLoader({ params }) {
-  // ここにFetchを書くってことか
   const { id } = params;
   //TODO マジックナンバーをConfigに
   const response = await fetch(`http://127.0.0.1:8888/api/files/${id}`);
@@ -56,13 +57,11 @@ const router = createBrowserRouter([
       {
         path: "/files/:id",
         element: <FileDetail />,
-        errorElement: <ErrorPage />,
         loader: fileLoader,
       },
       {
         path: "/files/new",
         element: <FileNew />,
-        errorElement: <ErrorPage />,
       },
     ],
   },

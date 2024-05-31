@@ -38,8 +38,15 @@ func LoggingMiddleware(next http.Handler, httpLogger *slog.Logger) http.Handler 
 
 		next.ServeHTTP(rlw, r)
 
+		//　こんなログ意味ないよ (^. . \)
 		defer func() {
-			httpLogger.Info("Response", slog.String("status", fmt.Sprintf("%d", rlw.statusCode)), slog.String("RemoteAddr", r.RemoteAddr))
+			if rlw.statusCode >= 500 && rlw.statusCode < 600 {
+				httpLogger.Error("Response", slog.String("status", fmt.Sprintf("%d", rlw.statusCode)), slog.String("RemoteAddr", r.RemoteAddr))
+			} else if rlw.statusCode >= 400 && rlw.statusCode < 500 {
+				httpLogger.Warn("Response", slog.String("status", fmt.Sprintf("%d", rlw.statusCode)), slog.String("RemoteAddr", r.RemoteAddr))
+			} else {
+				httpLogger.Info("Response", slog.String("status", fmt.Sprintf("%d", rlw.statusCode)), slog.String("RemoteAddr", r.RemoteAddr))
+			}
 		}()
 	})
 }

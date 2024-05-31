@@ -66,7 +66,7 @@ func (d *fileDB) GetAll(ctx context.Context, params url.Values) ([]*model.File, 
 
 	// オーダー
 	if direction := params.Get("ordered"); direction != "" {
-		if direction == "asce" || direction == "desc" {
+		if direction == "asc" || direction == "desc" {
 			if sort_query != "" {
 				sort_query += " " + direction
 			} else {

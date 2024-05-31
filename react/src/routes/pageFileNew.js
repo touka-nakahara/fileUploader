@@ -1,4 +1,6 @@
 import { useState } from "react";
+import bcrypt from "bcryptjs";
+import styles from "../routes-css/new.module.css";
 
 export default function FileNew() {
   const [files, setFiles] = useState([]);
@@ -16,7 +18,7 @@ export default function FileNew() {
     ]);
   }
 
-  //TODO 途中削除したら際レンダリングされるのでindexがずれないはず...
+  //RV nakaharaY 途中削除したら際レンダリングされるのでindexがずれないはず...
   function changeMetaDataName(index, name) {
     const updateMetadata = [...metadata];
     const updateElement = metadata[index];
@@ -28,7 +30,7 @@ export default function FileNew() {
     setMetadata(updateMetadata);
   }
 
-  // アホすぎて笑えるわ
+  //RV nakaharaY もっと効率の良い書き方があるはず
   function changeMetaDataPassword(index, password) {
     const updateMetadata = [...metadata];
     const updateElement = metadata[index];
@@ -56,17 +58,30 @@ export default function FileNew() {
       return;
     }
 
+    const originalFiles = files;
+    const originalMeta = metadata;
+
     // forループにするか
     files.forEach(async (file, index) => {
       //　パスワードを暗号化する処理
+      const salt = bcrypt.genSaltSync(10);
+
+      const password = metadata[index].password;
+      let hash = "";
+      if (password != "") {
+        hash = bcrypt.hashSync(password, salt);
+      }
 
       const formData = new FormData();
 
+      const fileExtension = retriveExtension(file.name);
+
       const fileData = {
-        name: metadata.name,
-        password: metadata[index].password,
+        name: metadata[index].name,
+        password: hash,
         description: metadata[index].description,
-        extension: retriveExtension(file.name),
+        extension: fileExtension,
+        size: file.size,
       };
 
       formData.append("file", JSON.stringify(fileData));
@@ -77,16 +92,25 @@ export default function FileNew() {
         body: formData,
       });
 
-      //TODO エラーを起こす方法を知らない...
       if (!result.ok) {
-        alert(result);
+        const response = await result.json();
+        alert(response.message);
+      } else {
+        // 成功したらstateから削除
+        //RV 非同期に行われるので, indexとの関係を保持できていない
+        const removeTarget = originalFiles[index];
+        const removeMetadata = originalMeta[index];
+        setFiles((prevFiles) => prevFiles.filter((t, _) => t !== removeTarget));
+        setMetadata((prevMetadata) =>
+          prevMetadata.filter((t, _) => t !== removeMetadata)
+        );
       }
     });
   }
 
   return (
-    <>
-      <FileUploadField addFile={addFile} />
+    <div className={styles.fileUplaodNew}>
+      <FileUploadField addFile={addFile} handleUpload={handleUpload} />
       <FileSentButton handleUpload={handleUpload} />
       <FilesPreview
         files={files}
@@ -95,14 +119,17 @@ export default function FileNew() {
         handlePasswordChange={changeMetaDataPassword}
         handleDescriptionChange={changeMetaDataDescription}
       />
-    </>
+    </div>
   );
 }
 
 function FileUploadField({ addFile }) {
   return (
     <>
-      <FileUploadButton addFile={addFile} />
+      <div>
+        <p>ファイルをアップロードします</p>
+        <FileUploadButton addFile={addFile} />
+      </div>
     </>
   );
 }
@@ -116,25 +143,23 @@ function FileUploadButton({ addFile }) {
 
   return (
     <>
-      <div>
-        <p>ファイルアップロード</p>
-        <input type="file" accept="*" onChange={handleFileChange} multiple />
-      </div>
+      <input
+        className={styles.uploadButton}
+        type="file"
+        accept="*"
+        onChange={handleFileChange}
+        multiple
+      />
     </>
   );
 }
 
+//RV nakaharaY これまとめても良い
 function FileSentButton({ handleUpload }) {
-  return (
-    <>
-      <div>
-        <button onClick={handleUpload}>ファイルを送信</button>
-      </div>
-    </>
-  );
+  return <button onClick={handleUpload}>ファイルを送信</button>;
 }
 
-// マジで終わってるどうしたらええんや？
+//　ファイルプレビュー配列
 function FilesPreview({
   files,
   metadata,
@@ -162,6 +187,7 @@ function FilesPreview({
   return <ul>{filePreviews}</ul>;
 }
 
+// ファイルプレビュー
 function FilePreview({
   file, // 実はこれいらないんか...
   metadata,
@@ -171,41 +197,48 @@ function FilePreview({
   handleDescriptionChange,
 }) {
   return (
-    <div>
-      <p>可能ならサムネ</p>
-      <input
-        type="text"
-        placeholder="ファイル名"
-        name="filename"
-        value={metadata.name}
-        onChange={(e) => handleNameChange(index, e.target.value)}
-      ></input>
-      <p>{file.size} バイト</p>
-      <input
-        type="text"
-        placeholder="パスワードを入力してください"
-        value={metadata.password}
-        onChange={(e) => handlePasswordChange(index, e.target.value)}
-      ></input>
-      <input type="text" placeholder="このファイルは..."></input>
-      <DescriptionArea
-        metadata={metadata}
-        index={index}
-        handleDescriptionChange={handleDescriptionChange}
-      />
+    <div className={styles.filePreviewItem}>
+      <div>
+        <input
+          className={styles.inputFieldTitle}
+          type="text"
+          placeholder="ファイル名"
+          name="filename"
+          value={metadata.name}
+          onChange={(e) => handleNameChange(index, e.target.value)}
+        ></input>
+      </div>
+      <div>
+        <p>{file.size} バイト</p>
+        <input
+          className={styles.inputField}
+          type="text"
+          placeholder="パスワードを入力してください"
+          value={metadata.password}
+          onChange={(e) => handlePasswordChange(index, e.target.value)}
+        ></input>
+        <DescriptionArea
+          metadata={metadata}
+          index={index}
+          handleDescriptionChange={handleDescriptionChange}
+        />
+      </div>
     </div>
   );
 }
 
+// 説明のページs
 function DescriptionArea({ metadata, index, handleDescriptionChange }) {
   return (
     <textarea
+      className={styles.textArea}
       value={metadata.description}
       onChange={(e) => handleDescriptionChange(index, e.target.value)}
     />
   );
 }
 
+// 拡張子を取り除く
 function removeExtension(filename) {
   var lastDotIndex = filename.lastIndexOf(".");
   if (lastDotIndex !== -1) {
@@ -214,6 +247,7 @@ function removeExtension(filename) {
   return filename;
 }
 
+// 拡張子を取得する
 function retriveExtension(filename) {
   var lastDotIndex = filename.lastIndexOf(".");
   if (lastDotIndex === -1) {

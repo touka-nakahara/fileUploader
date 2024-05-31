@@ -5,3 +5,11 @@
 {"time":"2024-05-31T15:27:34.403+09:00","level":"ERROR","msg":"this user requires mysql native password authentication","func":"mq.Connect()"}
 {"time":"2024-05-31T15:27:59.026965+09:00","level":"ERROR","msg":"this user requires mysql native password authentication","func":"mq.Connect()"}
 {"time":"2024-05-31T15:28:49.729025+09:00","level":"INFO","msg":"Server start"}
+{"time":"2024-05-31T16:12:31.096442+09:00","level":"INFO","msg":"Server start"}
+{"time":"2024-05-31T16:12:54.862421+09:00","level":"INFO","msg":"Server start"}
+{"time":"2024-05-31T16:13:12.108867+09:00","level":"INFO","msg":"Server start"}
+{"time":"2024-05-31T16:30:41.712095+09:00","level":"INFO","msg":"Server start"}
+{"time":"2024-05-31T16:32:27.491521+09:00","level":"INFO","msg":"Server start"}
+{"time":"2024-05-31T16:32:47.520166+09:00","level":"INFO","msg":"Server start"}
+{"time":"2024-05-31T16:42:58.227687+09:00","level":"INFO","msg":"Server start"}
+{"time":"2024-05-31T16:55:08.377458+09:00","level":"INFO","msg":"Server start"}
