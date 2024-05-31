@@ -87,6 +87,7 @@ func Test_fileDB_Put(t *testing.T) {
 		t.Fatalf("Unexpected Error %v", err)
 	}
 	fileDB := mq.NewFileDB(db)
+
 	tests := []struct {
 		name   string
 		params *model.File

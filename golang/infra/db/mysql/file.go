@@ -5,11 +5,15 @@ import (
 	"database/sql"
 	"fileUploader/model"
 	"fileUploader/repository"
+	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
-type fileDB struct{ connection *sql.DB }
+type fileDB struct {
+	connection *sql.DB
+}
 
 var _ repository.FileRepository = (*fileDB)(nil)
 
@@ -22,30 +26,32 @@ func NewFileDB(db *sql.DB) *fileDB {
 // 　全てのファイルを取得する
 func (d *fileDB) GetAll(ctx context.Context, params url.Values) ([]*model.File, error) {
 	// クエリパラメータの処理
-	query := "SELECT id, name, size, extension, description, password, UUID, thumbnail, is_available, update_date, upload_date FROM file.File"
+	query := "SELECT id, name, size, extension, description, password, thumbnail, is_available, update_date, upload_date FROM file.File"
 	var conditions []string
 	var args []interface{}
 
-	//TODO クエリパラメータが複数 (jpg, pdf)の時対応できてない
+	// ファイルタイプ
 	if extension := params.Get("type"); extension != "" {
-		//TODO サニタイズ
 		conditions = append(conditions, "extension = ?")
 		args = append(args, extension)
 	}
 
+	// 1時間以内に削除されたものを見る
 	if isAvailable := params.Get("is_available"); isAvailable != "" {
 		if isAvailable == "false" {
-			conditions = append(conditions, "is_available <= DATE_SUB(NOW(), INTERVAL 1 HOUR")
+			conditions = append(conditions, "is_available >= DATE_SUB(NOW(), INTERVAL 1 HOUR) AND is_available <= NOW()")
 		}
 	} else {
 		conditions = append(conditions, "is_available > NOW()")
 	}
 
+	// 検索
 	if searchParam := params.Get("search"); searchParam != "" {
 		conditions = append(conditions, "name LIKE ?")
-		args = append(args, searchParam)
+		args = append(args, "%"+searchParam+"%")
 	}
 
+	// WHEREクエリの結合
 	if len(conditions) > 0 {
 		query += " WHERE " + strings.Join(conditions, " AND ")
 	}
@@ -58,32 +64,52 @@ func (d *fileDB) GetAll(ctx context.Context, params url.Values) ([]*model.File, 
 		}
 	}
 
+	// オーダー
 	if direction := params.Get("ordered"); direction != "" {
-		// 昇順 or 降順
 		if direction == "asce" || direction == "desc" {
 			if sort_query != "" {
 				sort_query += " " + direction
 			} else {
+				// 指定していない場合は名前でソート
 				sort_query += "order by name" + " " + direction
 			}
 		}
 	}
 
+	// クエリ結合
 	if sort_query != "" {
 		query += " " + sort_query
 	}
 
-	//TODO ページング
+	// 最大数制限
 	query += " " + "limit 20"
 
+	//　ページ
+	//RV nakaharaY クエリ処理はここではなくて別のところで行ったほうがいい
+	//RV nakaharaY ページで見つからなかった場合エラーを返したい気もしている
+	if page := params.Get("page"); page != "" {
+		scaler, err := strconv.Atoi(page)
+		if err != nil {
+			// return nil, err
+			return nil, fmt.Errorf("page param type should be number but actual %s", page)
+		}
+		offset := (scaler - 1) * 20
+
+		query += fmt.Sprintf(" offset %d", offset)
+	}
+
+	// クエリ実行
+	//TODO カラム総数, タイプを取得して返したい
 	rows, err := d.connection.QueryContext(
 		ctx,
 		query,
 		args...,
 	)
+
 	if err != nil {
 		return nil, err
 	}
+
 	defer rows.Close()
 
 	var files []*model.File
@@ -96,7 +122,6 @@ func (d *fileDB) GetAll(ctx context.Context, params url.Values) ([]*model.File, 
 			&file.Extension,
 			&file.Description,
 			&file.Password,
-			&file.UUID,
 			&file.Thumbnail,
 			&file.IsAvailable,
 			&file.UpdateDate,
@@ -112,10 +137,11 @@ func (d *fileDB) GetAll(ctx context.Context, params url.Values) ([]*model.File, 
 }
 
 func (d *fileDB) Get(ctx context.Context, id model.FileID) (*model.File, error) {
-	query := "SELECT id, name, size, extension, description, password, UUID, thumbnail, is_available, update_date, upload_date FROM file.File WHERE id = ?"
+	query := "SELECT id, name, size, extension, description, password,  thumbnail, is_available, update_date, upload_date FROM file.File WHERE id = ?"
 	row := d.connection.QueryRowContext(ctx, query, id)
 
 	file := new(model.File)
+
 	err := row.Scan(
 		&file.ID,
 		&file.Name,
@@ -123,12 +149,12 @@ func (d *fileDB) Get(ctx context.Context, id model.FileID) (*model.File, error) 
 		&file.Extension,
 		&file.Description,
 		&file.Password,
-		&file.UUID,
 		&file.Thumbnail,
 		&file.IsAvailable,
 		&file.UpdateDate,
 		&file.UploadDate,
 	)
+
 	if err != nil {
 		return nil, err
 	}
@@ -138,12 +164,15 @@ func (d *fileDB) Get(ctx context.Context, id model.FileID) (*model.File, error) 
 
 func (d *fileDB) GetData(ctx context.Context, id model.FileID) (*model.FileBlob, error) {
 	query := "SELECT id, data FROM file.Data WHERE file_id = ?"
+
 	row := d.connection.QueryRowContext(ctx, query, id)
+
 	file := new(model.FileBlob)
 	err := row.Scan(
 		&file.ID,
 		&file.Data,
 	)
+
 	if err != nil {
 		return nil, err
 	}
@@ -152,21 +181,22 @@ func (d *fileDB) GetData(ctx context.Context, id model.FileID) (*model.FileBlob,
 }
 
 func (d *fileDB) Add(ctx context.Context, file *model.File, fileData *model.FileBlob) error {
-	// トランザクションの開始
+
+	// データの実態とメタデータの保存をトランザクションで行う
 	tx, err := d.connection.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
+
 	if err != nil {
 		return err
 	}
 
-	// file.Fileへデータ保存
 	query := `
 		INSERT INTO file.File (
-			name, size, extension, description, password, UUID, thumbnail
-		) VALUES (?, ?, ?, ?, ?, ?, ?)`
+			name, size, extension, description, password, thumbnail
+		) VALUES (?, ?, ?, ?, ?, ?)`
 
 	result, execErr := tx.ExecContext(ctx, query,
 		file.Name, file.Size, file.Extension, file.Description,
-		file.Password, file.UUID, file.Thumbnail)
+		file.Password, file.Thumbnail)
 
 	if execErr != nil {
 		tx.Rollback()
@@ -174,19 +204,18 @@ func (d *fileDB) Add(ctx context.Context, file *model.File, fileData *model.File
 	}
 
 	id, err := result.LastInsertId()
+
 	if err != nil {
 		tx.Rollback()
 		return err
 	}
 
-	// file.Dataへデータ保存
 	query = `
 		INSERT INTO file.Data (
 			file_id, data
 		) VALUES (?, ?)`
 
-	_, execErr = tx.ExecContext(ctx, query,
-		id, fileData.Data)
+	_, execErr = tx.ExecContext(ctx, query, id, fileData.Data)
 
 	if execErr != nil {
 		tx.Rollback()
@@ -201,7 +230,20 @@ func (d *fileDB) Add(ctx context.Context, file *model.File, fileData *model.File
 	return nil
 }
 
-// TODO PUTにするにしては構造体として大きすぎるよな〜
+func (d *fileDB) Delete(ctx context.Context, id model.FileID) error {
+	query := "UPDATE file.File SET is_available=NOW() WHERE id=?;"
+
+	_, err := d.connection.ExecContext(ctx, query, id)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// RV nakaharaY PUTにするにしてはmodel.Fileはオーバースペックのような気がする
+// TODO 実装する
 func (d *fileDB) Put(ctx context.Context, id model.FileID, file *model.File) error {
 	query := "UPDATE file.File"
 	var conditions []string
@@ -227,16 +269,6 @@ func (d *fileDB) Put(ctx context.Context, id model.FileID, file *model.File) err
 
 	_, err := d.connection.ExecContext(ctx, query, args...)
 
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-// TODO 外部キー制約があるので消せないわ...
-func (d *fileDB) Delete(ctx context.Context, id model.FileID) error {
-	query := "UPDATE file.File SET is_available=NOW() WHERE id=?;"
-	_, err := d.connection.ExecContext(ctx, query, id)
 	if err != nil {
 		return err
 	}

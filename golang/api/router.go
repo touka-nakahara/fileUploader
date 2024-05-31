@@ -2,28 +2,28 @@ package api
 
 import (
 	"database/sql"
+	"fileUploader/api/middleware"
 	"fileUploader/controller"
 	mq "fileUploader/infra/db/mysql"
 	"fileUploader/service"
+	"log/slog"
 	"net/http"
 )
 
-func NewRouter(db *sql.DB) *http.ServeMux {
-	// DB接続
-	// コントローラー作成
+func NewRouter(db *sql.DB, httpLogger *slog.Logger) http.Handler {
+
 	connection := mq.NewFileDB(db)
 	s := service.NewFileService(connection)
 	fileController := controller.NewFileController(s)
 
 	r := http.NewServeMux()
 
-	// 静的ファイル
-
 	// GET /
+	//RV いらないかも ( 静的ファイルとしてbuildできなくなった )
 	r.Handle("GET /", http.FileServer(http.Dir("static/root")))
-	// TODO 何がきてもindexへredirectする (api以外は)
 
 	// API
+	//RV nakaharaY ハンドラ名メソッドに紐づけるとズレた時めんどいのでやめるべき
 
 	// GET /files? (get list)
 	r.HandleFunc("GET /api/files", fileController.GetFileListHandler)
@@ -33,10 +33,15 @@ func NewRouter(db *sql.DB) *http.ServeMux {
 	r.HandleFunc("POST /api/files/{id}/download", fileController.GetFileDownloadHandler)
 	// POST /files (upload)
 	r.HandleFunc("POST /api/files", fileController.PostFileHandler)
-	// PUT /files/id (change)
-	r.HandleFunc("PUT /api/files", fileController.PutFileHandler)
 	// DELETE /files/id (delte)
 	r.HandleFunc("POST /api/files/{id}", fileController.DeleteFileHandler)
 
-	return r
+	// PUT /files/id (change)
+	// r.HandleFunc("PUT /api/files/{id}", fileController.PutFileHandler)
+
+	//RV middlewareの適用順番などを自由にできるパターンが欲しい
+	h := middleware.CORSMiddleware(r)
+	h = middleware.LoggingMiddleware(h, httpLogger)
+
+	return h
 }

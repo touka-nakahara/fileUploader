@@ -1,0 +1,7 @@
+{"time":"2024-05-31T15:18:16.009694+09:00","level":"INFO","msg":"Server start"}
+{"time":"2024-05-31T15:20:42.065844+09:00","level":"INFO","msg":"Server start"}
+{"time":"2024-05-31T15:21:02.951782+09:00","level":"INFO","msg":"Server start"}
+{"time":"2024-05-31T15:27:04.929341+09:00","level":"INFO","msg":"this user requires mysql native password authentication","func":"mq.Connect()"}
+{"time":"2024-05-31T15:27:34.403+09:00","level":"ERROR","msg":"this user requires mysql native password authentication","func":"mq.Connect()"}
+{"time":"2024-05-31T15:27:59.026965+09:00","level":"ERROR","msg":"this user requires mysql native password authentication","func":"mq.Connect()"}
+{"time":"2024-05-31T15:28:49.729025+09:00","level":"INFO","msg":"Server start"}

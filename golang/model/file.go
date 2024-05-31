@@ -13,8 +13,6 @@ type File struct {
 
 	Password string `json:"password"`
 
-	UUID string `json:"uuid"`
-
 	Thumbnail []byte `json:"thumnbnail"`
 
 	IsAvailable time.Time `json:"is_available"`

@@ -7,8 +7,6 @@ import (
 
 // エラーが発生したときのレスポンス処理をここで行う
 func errorHandler(w http.ResponseWriter, _ *http.Request, statusCode int, message string) {
-	//TODO slogへ
-	// log.Printf("error: %s\n", message)
 
 	type ErrorMessage struct {
 		Message string `json:"message"`
