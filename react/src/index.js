@@ -19,7 +19,9 @@ export async function filesLoader() {
 
   if (!response.ok) {
     // サーバーエラーが起きた場合
-    throw new Response("Failed to fetch data", { status: response.status });
+    throw new Response("サーバーの応答がありません", {
+      status: response.status,
+    });
   }
 
   const files = await response.json();
@@ -34,7 +36,9 @@ export async function fileLoader({ params }) {
   const response = await fetch(`http://127.0.0.1:8888/api/files/${id}`);
 
   if (!response.ok) {
-    throw new Response("Failed to fetch data", { status: response.status });
+    throw new Response("サーバーの応答がありません", {
+      status: response.status,
+    });
   }
 
   const file = await response.json();
@@ -69,7 +73,7 @@ const router = createBrowserRouter([
 
 const root = createRoot(document.getElementById("root"));
 root.render(
-  <StrictMode>
-    <RouterProvider router={router} />
-  </StrictMode>
+  // <StrictMode>
+  <RouterProvider router={router} />
+  // </StrictMode>
 );
