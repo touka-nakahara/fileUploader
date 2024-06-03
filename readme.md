@@ -15,6 +15,11 @@ GET / : index.html
 ### 起動方法
 ```
 docker compose run -d
-cd ./golang/cmd
+
+cd fileUploader/react
+npm install
+
+cd fileUploader/golang/cmd
 go run main.go
 ```
+http://localhost:3000 へアクセス
