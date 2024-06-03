@@ -11,3 +11,10 @@ GET / : index.html
 - POST /api/files/{id}/download : ファイルのダウンロード
 - POST /api/files : ファイルのアップロード
 - POST /api/files/{id} : ファイルの削除
+
+### 起動方法
+```
+docker compose run -d
+cd ./golang/cmd
+go run main.go
+```
