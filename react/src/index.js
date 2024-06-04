@@ -14,8 +14,13 @@ export async function filesLoader() {
   // ここにFetchを書くってことか
 
   //TODO マジックナンバーをConfigに
-
-  const response = await fetch("http://127.0.0.1:8888/api/files");
+  try {
+    const response = await fetch("http://127.0.0.1:8888/api/files");
+  } catch (e) {
+    console.log("サーバーの応答がありません");
+    throw new Error("サーバーの応答がありません");
+    //RV nakahara Y throw new Responseが問題だったぽいな 余裕があれば調べる
+  }
 
   if (!response.ok) {
     // サーバーエラーが起きた場合
