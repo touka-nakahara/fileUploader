@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"time"
 
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -23,7 +24,6 @@ type FileService interface {
 	GetFileService(ctx context.Context, fileID model.FileID) (*model.File, error)
 	GetFileDownloadService(ctx context.Context, fileID model.FileID, password string) (*model.FileBlob, error)
 	PostFileService(ctx context.Context, file *model.File, fileData *model.FileBlob) error
-	PutFileService(ctx context.Context, fileID model.FileID, file *model.File) error
 	DeleteFileService(ctx context.Context, fileID model.FileID, password string) error
 }
 
@@ -42,6 +42,8 @@ func NewFileService(fileRepo repository.FileRepository) *fileService {
 }
 
 func (s *fileService) GetFileListService(ctx context.Context, queryPrams url.Values) ([]*model.File, error) {
+	ctx, span := trace.SpanFromContext(ctx).TracerProvider().Tracer("GetFileListService").Start(ctx, "GetFileListService")
+	defer span.End()
 
 	files, err := s.fileRepository.GetAll(ctx, queryPrams)
 
@@ -62,6 +64,8 @@ func (s *fileService) GetFileListService(ctx context.Context, queryPrams url.Val
 }
 
 func (s *fileService) GetFileService(ctx context.Context, fileID model.FileID) (*model.File, error) {
+	ctx, span := trace.SpanFromContext(ctx).TracerProvider().Tracer("GetFileService").Start(ctx, "GetFileService")
+	defer span.End()
 
 	file, err := s.fileRepository.Get(ctx, fileID)
 
@@ -85,6 +89,9 @@ func (s *fileService) GetFileService(ctx context.Context, fileID model.FileID) (
 }
 
 func (s *fileService) PostFileService(ctx context.Context, file *model.File, fileData *model.FileBlob) error {
+	ctx, span := trace.SpanFromContext(ctx).TracerProvider().Tracer("PostFileService").Start(ctx, "PostFileService")
+	defer span.End()
+
 	if err := s.fileRepository.Add(ctx, file, fileData); err != nil {
 		return err
 	}
@@ -92,6 +99,9 @@ func (s *fileService) PostFileService(ctx context.Context, file *model.File, fil
 }
 
 func (s *fileService) DeleteFileService(ctx context.Context, fileID model.FileID, password string) error {
+	ctx, span := trace.SpanFromContext(ctx).TracerProvider().Tracer("DeleteFileService").Start(ctx, "DeleteFileService")
+	defer span.End()
+
 	//　パスワード認証
 	file, err := s.fileRepository.Get(ctx, fileID)
 
@@ -118,6 +128,9 @@ func (s *fileService) DeleteFileService(ctx context.Context, fileID model.FileID
 }
 
 func (s *fileService) GetFileDownloadService(ctx context.Context, fileID model.FileID, password string) (*model.FileBlob, error) {
+	ctx, span := trace.SpanFromContext(ctx).TracerProvider().Tracer("GetFileDownloadService").Start(ctx, "GetFileDownloadService")
+	defer span.End()
+
 	// パスワードチェック
 	file, err := s.fileRepository.Get(ctx, fileID)
 
@@ -144,12 +157,4 @@ func (s *fileService) GetFileDownloadService(ctx context.Context, fileID model.F
 	}
 
 	return fileData, nil
-}
-
-// TODO 未実装
-func (s *fileService) PutFileService(ctx context.Context, fileID model.FileID, file *model.File) error {
-	if err := s.fileRepository.Put(ctx, fileID, file); err != nil {
-		return err
-	}
-	return nil
 }

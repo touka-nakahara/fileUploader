@@ -6,8 +6,10 @@ import (
 	"os"
 	"time"
 
+	"github.com/XSAM/otelsql"
 	"github.com/go-sql-driver/mysql"
 	_ "github.com/go-sql-driver/mysql"
+	semconv "go.opentelemetry.io/otel/semconv/v1.18.0"
 )
 
 func Connect() (*sql.DB, error) {
@@ -22,7 +24,7 @@ func Connect() (*sql.DB, error) {
 		AllowNativePasswords: true,
 	}
 
-	db, err := sql.Open("mysql", c.FormatDSN())
+	db, err := otelsql.Open("mysql", c.FormatDSN(), otelsql.WithAttributes(semconv.DBSystemMySQL))
 	if err != nil {
 		return nil, err
 	}

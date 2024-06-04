@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -31,10 +32,13 @@ func NewFileController(service service.FileService, config *FileControllerConfig
 
 // GET /files, GET/files?
 func (c *fileController) GetFileListHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	ctx, span := trace.SpanFromContext(ctx).TracerProvider().Tracer("GetFileListHandler").Start(ctx, "GetFileListHandler")
+	defer span.End()
 
 	queryParams := r.URL.Query()
 
-	files, err := c.service.GetFileListService(r.Context(), queryParams)
+	files, err := c.service.GetFileListService(ctx, queryParams)
 
 	if err != nil {
 		errorHandler(w, r, 500, service.ErrServerIntarnal.Error())
@@ -52,6 +56,9 @@ func (c *fileController) GetFileListHandler(w http.ResponseWriter, r *http.Reque
 
 // GET /files/id
 func (c *fileController) GetFileHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	ctx, span := trace.SpanFromContext(ctx).TracerProvider().Tracer("GetFileHandler").Start(ctx, "GetFileHandler")
+	defer span.End()
 
 	pathParam := r.PathValue("id")
 	fileID, err := strconv.Atoi(pathParam)
@@ -60,7 +67,7 @@ func (c *fileController) GetFileHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	file, err := c.service.GetFileService(r.Context(), model.FileID(fileID))
+	file, err := c.service.GetFileService(ctx, model.FileID(fileID))
 	if err != nil {
 
 		// 有効期限
@@ -84,7 +91,6 @@ func (c *fileController) GetFileHandler(w http.ResponseWriter, r *http.Request) 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
 	var res Response = Response{
-		//RV nakaharaY これいらない？
 		Message: "OK",
 		Data:    file,
 	}
@@ -93,6 +99,9 @@ func (c *fileController) GetFileHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 func (c *fileController) PostFileHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	ctx, span := trace.SpanFromContext(ctx).TracerProvider().Tracer("PostFileHandler").Start(ctx, "PostFileHandler")
+	defer span.End()
 
 	type Message struct {
 		File model.File     `json:"file"`
@@ -135,7 +144,7 @@ func (c *fileController) PostFileHandler(w http.ResponseWriter, r *http.Request)
 
 	m.Data.Data = fileData
 
-	if err := c.service.PostFileService(r.Context(), &m.File, &m.Data); err != nil {
+	if err := c.service.PostFileService(ctx, &m.File, &m.Data); err != nil {
 		errorHandler(w, r, 500, err.Error())
 		return
 	}
@@ -144,6 +153,9 @@ func (c *fileController) PostFileHandler(w http.ResponseWriter, r *http.Request)
 }
 
 func (c *fileController) DeleteFileHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	ctx, span := trace.SpanFromContext(ctx).TracerProvider().Tracer("DeleteFileHandler").Start(ctx, "DeleteFileHandler")
+	defer span.End()
 
 	// どこのファイルを削除するか確認
 	pathParam := r.PathValue("id")
@@ -164,7 +176,7 @@ func (c *fileController) DeleteFileHandler(w http.ResponseWriter, r *http.Reques
 	}
 
 	// ファイルを削除
-	if err := c.service.DeleteFileService(r.Context(), model.FileID(fileID), m.Password); err != nil {
+	if err := c.service.DeleteFileService(ctx, model.FileID(fileID), m.Password); err != nil {
 
 		// パスワード
 		if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
@@ -187,6 +199,9 @@ func (c *fileController) DeleteFileHandler(w http.ResponseWriter, r *http.Reques
 
 // GET files/id/download
 func (c *fileController) GetFileDownloadHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	ctx, span := trace.SpanFromContext(ctx).TracerProvider().Tracer("GetFileDownloadHandler").Start(ctx, "GetFileDownloadHandler")
+	defer span.End()
 
 	// どこのファイルをダウンロードするか確認
 	pathParam := r.PathValue("id")
@@ -207,7 +222,7 @@ func (c *fileController) GetFileDownloadHandler(w http.ResponseWriter, r *http.R
 	}
 
 	// ファイルをダウンロードする
-	fileData, err := c.service.GetFileDownloadService(r.Context(), model.FileID(fileID), m.Password)
+	fileData, err := c.service.GetFileDownloadService(ctx, model.FileID(fileID), m.Password)
 
 	if err != nil {
 		if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
@@ -231,37 +246,4 @@ func (c *fileController) GetFileDownloadHandler(w http.ResponseWriter, r *http.R
 		Data: fileData,
 	}
 	json.NewEncoder(w).Encode(res)
-}
-
-// PUT /files/id
-func (c *fileController) PutFileHandler(w http.ResponseWriter, r *http.Request) {
-	pathParam := r.PathValue("id")
-	fileID, err := strconv.Atoi(pathParam)
-	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(400)
-		var res Response = Response{
-			Message: err.Error(), //　不明なアドレスです
-			Data:    nil,
-		}
-		json.NewEncoder(w).Encode(res)
-		return
-	}
-
-	// パラメータの取得
-	type Message struct {
-		File model.File `json:"file"`
-	}
-	var m Message
-	if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
-		errorHandler(w, r, 400, err.Error())
-		return
-	}
-
-	if err := c.service.PutFileService(r.Context(), model.FileID(fileID), &m.File); err != nil {
-		errorHandler(w, r, 400, err.Error())
-		return
-	}
-
-	w.WriteHeader(204)
 }
