@@ -1,2 +1,3 @@
 /react/node_modules
 /react/package-lock.json
+/golang/log/*.log
