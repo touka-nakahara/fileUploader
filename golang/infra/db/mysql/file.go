@@ -3,7 +3,6 @@ package mq
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fileUploader/model"
 	"fileUploader/repository"
 	"fmt"
@@ -48,6 +47,7 @@ func (d *fileDB) GetAll(ctx context.Context, params *model.GetQueryParam) ([]*mo
 	if searchParam := params.Search; searchParam != "" {
 		conditions = append(conditions, "name LIKE ?")
 		args = append(args, "%"+searchParam+"%")
+		fmt.Println(searchParam)
 	}
 
 	// WHEREクエリの結合
@@ -124,7 +124,6 @@ func (d *fileDB) GetAll(ctx context.Context, params *model.GetQueryParam) ([]*mo
 	}
 
 	// エラーを起こす
-	return nil, errors.New("Test Error")
 	return files, nil
 }
 
@@ -231,38 +230,5 @@ func (d *fileDB) Delete(ctx context.Context, id model.FileID) error {
 		return err
 	}
 
-	return nil
-}
-
-// RV nakaharaY PUTにするにしてはmodel.Fileはオーバースペックのような気がする
-// TODO 実装する
-func (d *fileDB) Put(ctx context.Context, id model.FileID, file *model.File) error {
-	query := "UPDATE file.File"
-	var conditions []string
-	var args []interface{}
-	//　クエリの作成
-	if file.Name != "" {
-		conditions = append(conditions, "name = ?")
-		args = append(args, file.Name)
-	}
-	if file.Password != "" {
-		conditions = append(conditions, "password = ?")
-		args = append(args, file.Password)
-	}
-	if file.Description != "" {
-		conditions = append(conditions, "description = ?")
-		args = append(args, file.Description)
-	}
-
-	if len(conditions) > 0 {
-		query += " SET " + strings.Join(conditions, " , ")
-	}
-	//TODO UPDATEだけど何も変化がない場合
-
-	_, err := d.connection.ExecContext(ctx, query, args...)
-
-	if err != nil {
-		return err
-	}
 	return nil
 }
