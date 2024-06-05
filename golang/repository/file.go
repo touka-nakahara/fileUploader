@@ -12,6 +12,5 @@ type FileRepository interface {
 	Get(ctx context.Context, id model.FileID) (*model.File, error)
 	GetData(ctx context.Context, id model.FileID) (*model.FileBlob, error)
 	Add(ctx context.Context, file *model.File, fileData *model.FileBlob) error
-	Put(ctx context.Context, id model.FileID, file *model.File) error
 	Delete(ctx context.Context, id model.FileID) error
 }

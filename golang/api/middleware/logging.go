@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -29,23 +31,24 @@ func (lw *loggingWriter) WriteHeader(statusCode int) {
 
 func LoggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// ここで個別ログを作っていいものか...あとあとファイルオープンもここですることになるし
 
-		//RV RemoteAddrを入れるべきかはわからないが...一意にする必要があった
-		slog.Info("Rquest", slog.String("method", r.Method), slog.String("uri", r.RequestURI), slog.String("RemoteAddr", r.RemoteAddr))
+		spanCtx := trace.SpanContextFromContext(r.Context())
+		// Tracerが仕込まれていた場合, TracerIDを記述する
+		if spanCtx.HasTraceID() {
+			slog.Info("request", slog.String("method", r.Method), slog.String("uri", r.RequestURI), slog.String("trace-id", spanCtx.TraceID().String()))
+		}
 
 		rlw := newLoggingWriter(w)
 
 		next.ServeHTTP(rlw, r)
 
-		//　こんなログ意味ないよ (^. . \)
 		defer func() {
 			if rlw.statusCode >= 500 && rlw.statusCode < 600 {
-				slog.Error("Response", slog.String("status", fmt.Sprintf("%d", rlw.statusCode)), slog.String("RemoteAddr", r.RemoteAddr))
+				slog.Error("Response", slog.String("status", fmt.Sprintf("%d", rlw.statusCode)), slog.String("trace-id", spanCtx.TraceID().String()))
 			} else if rlw.statusCode >= 400 && rlw.statusCode < 500 {
-				slog.Warn("Response", slog.String("status", fmt.Sprintf("%d", rlw.statusCode)), slog.String("RemoteAddr", r.RemoteAddr))
+				slog.Warn("Response", slog.String("status", fmt.Sprintf("%d", rlw.statusCode)), slog.String("trace-id", spanCtx.TraceID().String()))
 			} else {
-				slog.Info("Response", slog.String("status", fmt.Sprintf("%d", rlw.statusCode)), slog.String("RemoteAddr", r.RemoteAddr))
+				slog.Info("Response", slog.String("status", fmt.Sprintf("%d", rlw.statusCode)), slog.String("trace-id", spanCtx.TraceID().String()))
 			}
 		}()
 	})

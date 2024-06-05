@@ -38,5 +38,11 @@ func Connect() (*sql.DB, error) {
 		return nil, err
 	}
 
+	// meter
+	err = otelsql.RegisterDBStatsMetrics(db, otelsql.WithAttributes(semconv.DBSystemMySQL))
+	if err != nil {
+		return nil, err
+	}
+
 	return db, nil
 }
