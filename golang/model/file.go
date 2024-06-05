@@ -26,3 +26,12 @@ type FileBlob struct {
 	ID   FileID `json:"id"`
 	Data []byte `json:"data"`
 }
+
+type GetQueryParam struct {
+	Extension    string
+	Is_available string
+	Search       string
+	Sort         string
+	Ordered      string
+	Page         int
+}

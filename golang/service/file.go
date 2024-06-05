@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fileUploader/model"
 	"fileUploader/repository"
-	"net/url"
 	"time"
 
 	"go.opentelemetry.io/otel/trace"
@@ -20,7 +19,7 @@ var ErrUnmatchPassword = errors.New("パスワードが違います")
 var ErrServerIntarnal = errors.New("サーバー内部エラーです")
 
 type FileService interface {
-	GetFileListService(ctx context.Context, queryParams url.Values) ([]*model.File, error)
+	GetFileListService(ctx context.Context, queryParams *model.GetQueryParam) ([]*model.File, error)
 	GetFileService(ctx context.Context, fileID model.FileID) (*model.File, error)
 	GetFileDownloadService(ctx context.Context, fileID model.FileID, password string) (*model.FileBlob, error)
 	PostFileService(ctx context.Context, file *model.File, fileData *model.FileBlob) error
@@ -41,14 +40,13 @@ func NewFileService(fileRepo repository.FileRepository) *fileService {
 	}
 }
 
-func (s *fileService) GetFileListService(ctx context.Context, queryPrams url.Values) ([]*model.File, error) {
+func (s *fileService) GetFileListService(ctx context.Context, queryPrams *model.GetQueryParam) ([]*model.File, error) {
 	ctx, span := trace.SpanFromContext(ctx).TracerProvider().Tracer("GetFileListService").Start(ctx, "GetFileListService")
 	defer span.End()
 
 	files, err := s.fileRepository.GetAll(ctx, queryPrams)
 
 	if err != nil {
-		//RV ログを日本語にするか問題
 		return nil, err
 	}
 

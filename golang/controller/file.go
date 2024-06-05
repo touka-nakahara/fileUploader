@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -33,12 +34,48 @@ func NewFileController(service service.FileService, config *FileControllerConfig
 // GET /files, GET/files?
 func (c *fileController) GetFileListHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	ctx, span := trace.SpanFromContext(ctx).TracerProvider().Tracer("GetFileListHandler").Start(ctx, "GetFileListHandler")
+	ctx, span := otel.Tracer("Test").Start(ctx, "GetFileListHandler")
 	defer span.End()
 
 	queryParams := r.URL.Query()
 
-	files, err := c.service.GetFileListService(ctx, queryParams)
+	// クエリパラメータ構造体に変換
+	getQueryParam := &model.GetQueryParam{}
+
+	// ファイルタイプ
+	if extension := queryParams.Get("type"); extension != "" {
+		getQueryParam.Extension = extension
+	}
+
+	// deleteParam
+	if isAvailable := queryParams.Get("is_available"); isAvailable != "" {
+		getQueryParam.Is_available = isAvailable
+	}
+
+	// searchParam
+	if searchParam := queryParams.Get("search"); searchParam != "" {
+		getQueryParam.Search = searchParam
+	}
+
+	// sort
+	if sort_name := queryParams.Get("sort"); sort_name != "" {
+		getQueryParam.Sort = sort_name
+	}
+
+	// order
+	if direction := queryParams.Get("ordered"); direction != "" {
+		getQueryParam.Ordered = direction
+	}
+
+	// page
+	if page := queryParams.Get("page"); page != "" {
+		pageInt, err := strconv.Atoi(page)
+		if err == nil {
+			getQueryParam.Page = pageInt
+		}
+	}
+
+	files, err := c.service.GetFileListService(ctx, getQueryParam)
 
 	if err != nil {
 		errorHandler(w, r, 500, service.ErrServerIntarnal.Error())
