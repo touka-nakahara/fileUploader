@@ -3,7 +3,7 @@ package service
 // このファイルはDBとAPIの境界線の接続を担当する
 import (
 	"context"
-	"errors"
+	errorHandle "fileUploader/controller/error"
 	"fileUploader/model"
 	"fileUploader/repository"
 	"time"
@@ -11,12 +11,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/crypto/bcrypt"
 )
-
-// RV nakaharaY ほんとにここか？ どこならいいのかわからないやつ
-var ErrFileNotFound = errors.New("ファイルが見つかりません")
-var ErrInvalidRequest = errors.New("不明なリクエストです")
-var ErrUnmatchPassword = errors.New("パスワードが違います")
-var ErrServerIntarnal = errors.New("サーバー内部エラーです")
 
 type FileService interface {
 	GetFileListService(ctx context.Context, queryParams *model.GetQueryParam) ([]*model.File, error)
@@ -72,9 +66,8 @@ func (s *fileService) GetFileService(ctx context.Context, fileID model.FileID) (
 	}
 
 	// 有効期限チェック
-	//RV 　DB側では有効期限チェックをしていないのはいいのだろうか？
 	if file.IsAvailable.Before(time.Now()) {
-		return nil, ErrFileNotFound
+		return nil, errorHandle.FileNotFound
 	}
 
 	// パスワードを削除
@@ -116,7 +109,7 @@ func (s *fileService) DeleteFileService(ctx context.Context, fileID model.FileID
 
 	// 有効期限チェック
 	if file.IsAvailable.Before(time.Now()) {
-		return ErrFileNotFound
+		return errorHandle.FileNotFound
 	}
 
 	if err := s.fileRepository.Delete(ctx, fileID); err != nil {
@@ -138,7 +131,7 @@ func (s *fileService) GetFileDownloadService(ctx context.Context, fileID model.F
 
 	// 有効期限チェック
 	if file.IsAvailable.Before(time.Now()) {
-		return nil, ErrFileNotFound
+		return nil, errorHandle.FileNotFound
 	}
 
 	if file.Password != "" {

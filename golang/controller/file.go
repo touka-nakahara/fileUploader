@@ -1,9 +1,8 @@
 package controller
 
 import (
-	"database/sql"
 	"encoding/json"
-	"errors"
+	errorHandle "fileUploader/controller/error"
 	"fileUploader/model"
 	"fileUploader/service"
 	"io"
@@ -12,7 +11,6 @@ import (
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
-	"golang.org/x/crypto/bcrypt"
 )
 
 type fileController struct {
@@ -78,7 +76,7 @@ func (c *fileController) GetFileListHandler(w http.ResponseWriter, r *http.Reque
 	files, err := c.service.GetFileListService(ctx, getQueryParam)
 
 	if err != nil {
-		errorHandler(w, r, 500, service.ErrServerIntarnal.Error())
+		errorHandle.ErrorHandler(w, r, err)
 		return
 	}
 
@@ -100,27 +98,13 @@ func (c *fileController) GetFileHandler(w http.ResponseWriter, r *http.Request) 
 	pathParam := r.PathValue("id")
 	fileID, err := strconv.Atoi(pathParam)
 	if err != nil || fileID == 0 {
-		errorHandler(w, r, 400, service.ErrInvalidRequest.Error())
+		errorHandle.ErrorHandler(w, r, errorHandle.InvalidRequest)
 		return
 	}
 
 	file, err := c.service.GetFileService(ctx, model.FileID(fileID))
 	if err != nil {
-
-		// 有効期限
-		if errors.Is(err, service.ErrFileNotFound) {
-			errorHandler(w, r, 404, err.Error())
-			return
-		}
-
-		// 存在しない
-		if errors.Is(err, sql.ErrNoRows) {
-			errorHandler(w, r, 404, "ファイルが見つかりません")
-			return
-		}
-
-		// それ以外
-		errorHandler(w, r, 500, err.Error())
+		errorHandle.ErrorHandler(w, r, err)
 		return
 	}
 
@@ -148,41 +132,40 @@ func (c *fileController) PostFileHandler(w http.ResponseWriter, r *http.Request)
 
 	MaxUploadSize := c.config.MaxUploadSize
 
+	// content-lengthを見ておく
+
 	// ファイルサイズを制限
 	r.Body = http.MaxBytesReader(w, r.Body, MaxUploadSize)
 	if err := r.ParseMultipartForm(MaxUploadSize); err != nil {
-		errorHandler(w, r, 400, "500MB以下のファイルを選択してください。")
+		errorHandle.ErrorHandler(w, r, errorHandle.TooLarge)
 		return
 	}
 
 	// ファイルメタデータの読み取り
-	//RV nakaharaY file.File -> file.Metadata ?
 	file := r.FormValue("file")
 	err := json.Unmarshal([]byte(file), &m.File)
 	if err != nil {
-		//RV nakaharaY ここでこけたらサーバーで直さないといけないからログとらないことまりそう
-		errorHandler(w, r, 500, err.Error())
+		errorHandle.ErrorHandler(w, r, err)
 	}
 
 	// アップロードされたファイルの読み取り
 	data, _, err := r.FormFile("data")
 	if err != nil {
-		errorHandler(w, r, 400, "不明なファイルが送信されました")
+		errorHandle.ErrorHandler(w, r, err)
 		return
 	}
 	defer data.Close()
 
 	fileData, err := io.ReadAll(data)
 	if err != nil {
-		//RV nakaharaY こういうところのエラーログ残ってて欲しいんだけどそうしたら中身をチェックするってことだからな〜どうしたらいいんだろう？
-		errorHandler(w, r, 400, "不明なファイルが送信されました")
+		errorHandle.ErrorHandler(w, r, err)
 		return
 	}
 
 	m.Data.Data = fileData
 
 	if err := c.service.PostFileService(ctx, &m.File, &m.Data); err != nil {
-		errorHandler(w, r, 500, err.Error())
+		errorHandle.ErrorHandler(w, r, err)
 		return
 	}
 
@@ -198,7 +181,7 @@ func (c *fileController) DeleteFileHandler(w http.ResponseWriter, r *http.Reques
 	pathParam := r.PathValue("id")
 	fileID, err := strconv.Atoi(pathParam)
 	if err != nil {
-		errorHandler(w, r, 400, service.ErrInvalidRequest.Error())
+		errorHandle.ErrorHandler(w, r, errorHandle.InvalidRequest)
 		return
 	}
 
@@ -208,26 +191,13 @@ func (c *fileController) DeleteFileHandler(w http.ResponseWriter, r *http.Reques
 	}
 	var m Message
 	if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
-		errorHandler(w, r, 500, err.Error())
+		errorHandle.ErrorHandler(w, r, err)
 		return
 	}
 
 	// ファイルを削除
 	if err := c.service.DeleteFileService(ctx, model.FileID(fileID), m.Password); err != nil {
-
-		// パスワード
-		if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
-			errorHandler(w, r, 400, service.ErrUnmatchPassword.Error())
-			return
-		}
-
-		// 有効期限
-		if errors.Is(err, service.ErrFileNotFound) {
-			errorHandler(w, r, 400, err.Error())
-			return
-		}
-
-		errorHandler(w, r, 400, err.Error())
+		errorHandle.ErrorHandler(w, r, err)
 		return
 	}
 
@@ -244,7 +214,7 @@ func (c *fileController) GetFileDownloadHandler(w http.ResponseWriter, r *http.R
 	pathParam := r.PathValue("id")
 	fileID, err := strconv.Atoi(pathParam)
 	if err != nil || fileID == 0 {
-		errorHandler(w, r, 400, "不明なリクエストです")
+		errorHandle.ErrorHandler(w, r, errorHandle.InvalidRequest)
 		return
 	}
 
@@ -254,7 +224,7 @@ func (c *fileController) GetFileDownloadHandler(w http.ResponseWriter, r *http.R
 	}
 	var m Message
 	if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
-		errorHandler(w, r, 400, err.Error())
+		errorHandle.ErrorHandler(w, r, err)
 		return
 	}
 
@@ -262,17 +232,7 @@ func (c *fileController) GetFileDownloadHandler(w http.ResponseWriter, r *http.R
 	fileData, err := c.service.GetFileDownloadService(ctx, model.FileID(fileID), m.Password)
 
 	if err != nil {
-		if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
-			errorHandler(w, r, 400, "パスワードが違います")
-			return
-		}
-
-		if errors.Is(err, service.ErrFileNotFound) {
-			errorHandler(w, r, 400, err.Error())
-			return
-		}
-
-		errorHandler(w, r, 500, err.Error())
+		errorHandle.ErrorHandler(w, r, err)
 		return
 	}
 
