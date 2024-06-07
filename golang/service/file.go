@@ -230,7 +230,7 @@ func (s *fileService) GetFileDownloadService(ctx context.Context, fileID model.F
 		}
 	}
 
-	fileData, err := s.fileRepository.GetData(ctx, fileID)
+	fileData, err := s.fileRepository.GetData(ctx, fileID, file.Uuid)
 
 	if err != nil {
 		return nil, err

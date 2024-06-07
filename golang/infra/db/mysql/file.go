@@ -6,6 +6,7 @@ import (
 	"fileUploader/model"
 	"fileUploader/repository"
 	"fmt"
+	"os"
 	"strings"
 )
 
@@ -155,20 +156,17 @@ func (d *fileDB) Get(ctx context.Context, id model.FileID) (*model.File, error) 
 	return file, nil
 }
 
-func (d *fileDB) GetData(ctx context.Context, id model.FileID) (*model.FileBlob, error) {
-	query := "SELECT id, data FROM file.Data WHERE file_id = ?"
+func (d *fileDB) GetData(ctx context.Context, id model.FileID, uuid string) (*model.FileBlob, error) {
 
-	row := d.connection.QueryRowContext(ctx, query, id)
-
-	file := new(model.FileBlob)
-	err := row.Scan(
-		&file.ID,
-		&file.Data,
-	)
-
+	localPath := os.Getenv("FILE_DIR")
+	data, err := os.ReadFile(localPath + "/" + uuid)
 	if err != nil {
 		return nil, err
 	}
+
+	file := new(model.FileBlob)
+	file.ID = id
+	file.Data = data
 
 	return file, nil
 }
@@ -203,16 +201,13 @@ func (d *fileDB) Add(ctx context.Context, file *model.File, fileData *model.File
 		return nil, err
 	}
 
-	query = `
-		INSERT INTO file.Data (
-			file_id, data
-		) VALUES (?, ?)`
+	//TODO これはDBじゃないからなんかいい感じにしたいけど...
+	localPath := os.Getenv("FILE_DIR")
 
-	_, execErr = tx.ExecContext(ctx, query, id, fileData.Data)
-
-	if execErr != nil {
+	err = os.WriteFile(localPath+"/"+file.Uuid, fileData.Data, 0666)
+	if err != nil {
 		tx.Rollback()
-		return nil, execErr
+		return nil, err
 	}
 
 	//　トランザクション実行
