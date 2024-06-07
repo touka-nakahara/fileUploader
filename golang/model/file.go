@@ -11,6 +11,7 @@ type File struct {
 	Extension   string `json:"extension"`
 	Description string `json:"description"`
 
+	Uuid     string
 	Password string `json:"password"`
 
 	Thumbnail []byte `json:"thumnbnail"`
@@ -34,4 +35,13 @@ type GetQueryParam struct {
 	Sort         string
 	Ordered      string
 	Page         int
+}
+
+type Response struct {
+	Message string      `json:"message"`
+	Data    interface{} `json:"data"`
+}
+
+type UploadResponse struct {
+	ID FileID `json:"id"`
 }

@@ -82,7 +82,7 @@ func (c *fileController) GetFileListHandler(w http.ResponseWriter, r *http.Reque
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
-	var res Response = Response{
+	var res model.Response = model.Response{
 		Message: "OK",
 		Data:    files,
 	}
@@ -98,7 +98,7 @@ func (c *fileController) GetFileHandler(w http.ResponseWriter, r *http.Request) 
 	pathParam := r.PathValue("id")
 	fileID, err := strconv.Atoi(pathParam)
 	if err != nil || fileID == 0 {
-		errorHandle.ErrorHandler(w, r, errorHandle.InvalidRequest)
+		errorHandle.ErrorHandler(w, r, errorHandle.ErrInvalidRequest)
 		return
 	}
 
@@ -111,7 +111,7 @@ func (c *fileController) GetFileHandler(w http.ResponseWriter, r *http.Request) 
 	// HTTPヘッダーの設定
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
-	var res Response = Response{
+	var res model.Response = model.Response{
 		Message: "OK",
 		Data:    file,
 	}
@@ -132,12 +132,11 @@ func (c *fileController) PostFileHandler(w http.ResponseWriter, r *http.Request)
 
 	MaxUploadSize := c.config.MaxUploadSize
 
-	// content-lengthを見ておく
-
 	// ファイルサイズを制限
 	r.Body = http.MaxBytesReader(w, r.Body, MaxUploadSize)
 	if err := r.ParseMultipartForm(MaxUploadSize); err != nil {
-		errorHandle.ErrorHandler(w, r, errorHandle.TooLarge)
+		// Deadline Exceeded Error 発生可能性あり
+		errorHandle.ErrorHandler(w, r, errorHandle.ErrTooLarge)
 		return
 	}
 
@@ -149,6 +148,7 @@ func (c *fileController) PostFileHandler(w http.ResponseWriter, r *http.Request)
 	}
 
 	// アップロードされたファイルの読み取り
+	span.AddEvent("Loading data")
 	data, _, err := r.FormFile("data")
 	if err != nil {
 		errorHandle.ErrorHandler(w, r, err)
@@ -161,15 +161,30 @@ func (c *fileController) PostFileHandler(w http.ResponseWriter, r *http.Request)
 		errorHandle.ErrorHandler(w, r, err)
 		return
 	}
+	span.AddEvent("End loading")
 
 	m.Data.Data = fileData
 
-	if err := c.service.PostFileService(ctx, &m.File, &m.Data); err != nil {
+	fileID, err := c.service.PostFileService(ctx, &m.File, &m.Data)
+	if err != nil {
 		errorHandle.ErrorHandler(w, r, err)
 		return
 	}
 
-	w.WriteHeader(204)
+	// メタデータを返す
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	upResp := &model.UploadResponse{
+		ID: *fileID,
+	}
+
+	resp := &model.Response{
+		Message: "ok",
+		Data:    upResp,
+	}
+
+	json.NewEncoder(w).Encode(resp)
 }
 
 func (c *fileController) DeleteFileHandler(w http.ResponseWriter, r *http.Request) {
@@ -181,7 +196,7 @@ func (c *fileController) DeleteFileHandler(w http.ResponseWriter, r *http.Reques
 	pathParam := r.PathValue("id")
 	fileID, err := strconv.Atoi(pathParam)
 	if err != nil {
-		errorHandle.ErrorHandler(w, r, errorHandle.InvalidRequest)
+		errorHandle.ErrorHandler(w, r, errorHandle.ErrInvalidRequest)
 		return
 	}
 
@@ -214,7 +229,7 @@ func (c *fileController) GetFileDownloadHandler(w http.ResponseWriter, r *http.R
 	pathParam := r.PathValue("id")
 	fileID, err := strconv.Atoi(pathParam)
 	if err != nil || fileID == 0 {
-		errorHandle.ErrorHandler(w, r, errorHandle.InvalidRequest)
+		errorHandle.ErrorHandler(w, r, errorHandle.ErrInvalidRequest)
 		return
 	}
 
@@ -239,7 +254,7 @@ func (c *fileController) GetFileDownloadHandler(w http.ResponseWriter, r *http.R
 	// すべて成功した場合
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
-	var res Response = Response{
+	var res model.Response = model.Response{
 		Data: fileData,
 	}
 	json.NewEncoder(w).Encode(res)

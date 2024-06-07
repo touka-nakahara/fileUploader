@@ -4,19 +4,21 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/crypto/bcrypt"
 )
 
-var FileNotFound = errors.New("ファイルが見つかりません")
-var InvalidRequest = errors.New("不明なリクエストです")
-var UnmatchPassword = errors.New("パスワードが違います")
-var ServerIntarnal = errors.New("サーバー内部エラーです")
-var TooLarge = errors.New("ファイルの容量が大きすぎます") //TODO 許容ファイルサイズを追加？
+var ErrFileNotFound = errors.New("ファイルが見つかりません")
+var ErrInvalidRequest = errors.New("不明なリクエストです")
+var ErrUnmatchPassword = errors.New("パスワードが違います")
+var ErrServerIntarnal = errors.New("サーバー内部エラーです")
+var ErrTooLarge = errors.New("ファイルの容量が大きすぎます") //TODO 許容ファイルサイズを追加？
 
 // エラーが発生したときのレスポンス処理をここで行う
-func ErrorHandler(w http.ResponseWriter, _ *http.Request, err error) {
+func ErrorHandler(w http.ResponseWriter, r *http.Request, err error) {
 
 	// エラーハンドリング
 	var statusCode int
@@ -26,19 +28,23 @@ func ErrorHandler(w http.ResponseWriter, _ *http.Request, err error) {
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		statusCode = 404
-		err = FileNotFound
-	case errors.Is(err, InvalidRequest):
+		err = ErrFileNotFound
+	case errors.Is(err, ErrInvalidRequest):
 		statusCode = 400
-	case errors.Is(err, FileNotFound):
+	case errors.Is(err, ErrFileNotFound):
 		statusCode = 404
-	case errors.Is(err, TooLarge):
+	case errors.Is(err, ErrTooLarge):
 		statusCode = 400
 	case errors.Is(err, bcrypt.ErrMismatchedHashAndPassword):
 		statusCode = 400
-		err = UnmatchPassword
+		err = ErrUnmatchPassword
+	case errors.Is(err, ErrUnmatchPassword):
+		statusCode = 400
 	default:
+		spanCtx := trace.SpanContextFromContext(r.Context())
+		slog.Error("error check", slog.String("error message", err.Error()), slog.String("trace-id", spanCtx.TraceID().String()))
 		statusCode = 500
-		err = ServerIntarnal
+		err = ErrServerIntarnal
 	}
 
 	type ErrorMessage struct {

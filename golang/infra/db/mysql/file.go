@@ -47,7 +47,6 @@ func (d *fileDB) GetAll(ctx context.Context, params *model.GetQueryParam) ([]*mo
 	if searchParam := params.Search; searchParam != "" {
 		conditions = append(conditions, "name LIKE ?")
 		args = append(args, "%"+searchParam+"%")
-		fmt.Println(searchParam)
 	}
 
 	// WHEREクエリの結合
@@ -56,28 +55,32 @@ func (d *fileDB) GetAll(ctx context.Context, params *model.GetQueryParam) ([]*mo
 	}
 
 	//　ソート
-	var sort_query string
+	var sortQuery string
 	if sort_name := params.Sort; sort_name != "" {
 		if sort_name == "name" || sort_name == "update_date" || sort_name == "size" {
-			sort_query += "order by" + " " + sort_name
+			sortQuery += "order by" + " " + sort_name
 		}
+	} else { // 指定しない場合はupdate_date
+		sortQuery += "order by update_date"
 	}
 
 	// オーダー
 	if direction := params.Ordered; direction != "" {
 		if direction == "asc" || direction == "desc" {
-			if sort_query != "" {
-				sort_query += " " + direction
+			if sortQuery != "" {
+				sortQuery += " " + direction
 			} else {
 				// 指定していない場合は名前でソート
-				sort_query += "order by name" + " " + direction
+				sortQuery += "order by name" + " " + direction
 			}
 		}
+	} else { // 指定していない場合は降順
+		sortQuery += " " + "desc"
 	}
 
 	// クエリ結合
-	if sort_query != "" {
-		query += " " + sort_query
+	if sortQuery != "" {
+		query += " " + sortQuery
 	}
 
 	// 最大数制限
@@ -123,7 +126,6 @@ func (d *fileDB) GetAll(ctx context.Context, params *model.GetQueryParam) ([]*mo
 		files = append(files, file)
 	}
 
-	// エラーを起こす
 	return files, nil
 }
 
@@ -171,13 +173,13 @@ func (d *fileDB) GetData(ctx context.Context, id model.FileID) (*model.FileBlob,
 	return file, nil
 }
 
-func (d *fileDB) Add(ctx context.Context, file *model.File, fileData *model.FileBlob) error {
-
+func (d *fileDB) Add(ctx context.Context, file *model.File, fileData *model.FileBlob) (*model.FileID, error) {
 	// データの実態とメタデータの保存をトランザクションで行う
+
 	tx, err := d.connection.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
 
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	query := `
@@ -191,14 +193,14 @@ func (d *fileDB) Add(ctx context.Context, file *model.File, fileData *model.File
 
 	if execErr != nil {
 		tx.Rollback()
-		return err
+		return nil, err
 	}
 
 	id, err := result.LastInsertId()
 
 	if err != nil {
 		tx.Rollback()
-		return err
+		return nil, err
 	}
 
 	query = `
@@ -210,15 +212,17 @@ func (d *fileDB) Add(ctx context.Context, file *model.File, fileData *model.File
 
 	if execErr != nil {
 		tx.Rollback()
-		return err
+		return nil, execErr
 	}
 
 	//　トランザクション実行
 	if err := tx.Commit(); err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	fileID := model.FileID(id)
+
+	return &fileID, nil
 }
 
 func (d *fileDB) Delete(ctx context.Context, id model.FileID) error {

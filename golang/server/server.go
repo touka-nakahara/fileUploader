@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fileUploader/api"
 	mq "fileUploader/infra/db/mysql"
-	"fileUploader/otel"
+	myotel "fileUploader/otel"
 	"io"
 	"log"
 	"log/slog"
@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/metric"
 )
 
 // サーバー起動
@@ -28,7 +30,7 @@ func NewServer() {
 	}
 
 	//　ログファイル設定
-	applicationLog, err := os.OpenFile("../log/application.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	applicationLog, err := os.OpenFile("log/application.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -40,11 +42,13 @@ func NewServer() {
 
 	logLevel := os.Getenv("LOG_LEVEL")
 
-	if logLevel == "ERROR" {
-		programLevel.Set(slog.LevelError)
-	}
-	if logLevel == "INFO" {
+	switch logLevel {
+	case "INFO":
 		programLevel.Set(slog.LevelInfo)
+	case "ERROR":
+		programLevel.Set(slog.LevelError)
+	case "DEBUG":
+		programLevel.Set(slog.LevelDebug)
 	}
 
 	slog.SetDefault(applicationLogger)
@@ -63,7 +67,7 @@ func NewServer() {
 	defer stop()
 
 	// Set up Otel
-	otelShutdown, err := otel.SetupOTelSDK(ctx)
+	otelShutdown, err := myotel.SetupOTelSDK(ctx)
 	if err != nil {
 		slog.Error(err.Error(), slog.String("func", "otel.SetupOtelSDK()")) //TODO これスタックトレースとかからうまくできないかなできないかな https://zenn.dev/ryo_yamaoka/articles/858fa01e9e11d0 ?
 		return
@@ -72,16 +76,42 @@ func NewServer() {
 		err = errors.Join(err, otelShutdown(context.Background()))
 	}()
 
+	var meter = otel.Meter("")
+	_, err = meter.Int64UpDownCounter(
+		"items.counter",
+		metric.WithDescription("Number of items."),
+		metric.WithUnit("{item}"),
+	)
+
+	if err != nil {
+		slog.Error(err.Error(), slog.String("func", "otel.Meter().Int64UpDownCounter"))
+		return
+	}
+
 	// サーバー作成
 	server := http.Server{
-		Addr:         os.Getenv("ADDRESS"),
+		Addr:         os.Getenv("ADDRESS") + ":" + os.Getenv("PORT"),
 		BaseContext:  func(_ net.Listener) context.Context { return ctx },
-		ReadTimeout:  time.Second,
-		WriteTimeout: 10 * time.Second,
+		ReadTimeout:  5 * time.Minute,
+		WriteTimeout: 5 * time.Minute,
 		Handler:      r,
 	}
 
-	slog.Info("Server start")
+	slog.Debug("Server setting:",
+		slog.String("LOG_LEVEL", os.Getenv("LOG_LEVEL")),
+		slog.String("ADDRESS", os.Getenv("ADDRESS")),
+		slog.String("PORT", os.Getenv("PORT")),
+		slog.String("DB_NAME", os.Getenv("DB_NAME")),
+		slog.String("DB_USER", os.Getenv("DB_USER")),
+		slog.String("DB_ADDRESS", os.Getenv("DB_ADDRESS")),
+		slog.String("DB_PORT", os.Getenv("DB_PORT")),
+		slog.String("MAX_UPLOAD_SIZE", os.Getenv("MAX_UPLOAD_SIZE")),
+	)
+
+	slog.Info("Server start",
+		slog.String("ADDRESS", os.Getenv("ADDRESS")),
+		slog.String("PORT", os.Getenv("PORT")),
+	)
 
 	srvErr := make(chan error, 1)
 	// サーバー起動

@@ -12,6 +12,9 @@ import (
 	"strconv"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel"
+
+	"net/http/pprof"
 )
 
 func NewRouter(db *sql.DB) http.Handler {
@@ -24,6 +27,7 @@ func NewRouter(db *sql.DB) http.Handler {
 		log.Fatal(err)
 
 	}
+
 	fileConfig := controller.FileControllerConfig{MaxUploadSize: maxUploadSize}
 	fileController := controller.NewFileController(s, &fileConfig)
 
@@ -46,11 +50,19 @@ func NewRouter(db *sql.DB) http.Handler {
 	// DELETE /files/id (delte)
 	handleFunc("POST /api/files/{id}", fileController.DeleteFileHandler)
 
+	// pprof
+	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+
 	// // ミドルウェアの適用
 	h := middleware.CORSMiddleware(mux)
 	h = middleware.LoggingMiddleware(h)
+	meterHanlder := middleware.NewMetricMiddleware(otel.Meter("Test1_metrics"))
+	h = meterHanlder(h)
 
-	handler := otelhttp.NewHandler(h, "", otelhttp.WithMessageEvents(otelhttp.ReadEvents, otelhttp.WriteEvents))
+	handler := otelhttp.NewHandler(h, "/", otelhttp.WithMessageEvents(otelhttp.ReadEvents, otelhttp.WriteEvents))
 
 	return handler
 }

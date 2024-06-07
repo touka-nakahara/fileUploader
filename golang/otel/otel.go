@@ -4,14 +4,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"go.opentelemetry.io/otel"
+
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.25.0"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -97,32 +101,40 @@ func initGrpcConn() (*grpc.ClientConn, error) {
 
 // Trace用のプロバイダ
 func newTraceProvider(ctx context.Context, conn *grpc.ClientConn) (*trace.TracerProvider, error) {
-	// TODO ExporterをstdからCollectorに変更したい
-	// traceExporter, err := stdouttrace.New(
-	// 	stdouttrace.WithPrettyPrint())
-	// if err != nil {
-	// 	return nil, err
-	// }
+
+	r, err := newResouce()
+
+	if err != nil {
+		return nil, err
+	}
 
 	traceExporter, err := otlptracegrpc.New(ctx, otlptracegrpc.WithGRPCConn(conn))
 	if err != nil {
 		return nil, err
 	}
 
+	// traceExporter, err := stdouttrace.New(
+	// 	stdouttrace.WithPrettyPrint())
+	// if err != nil {
+	// 	return nil, err
+	// }
+
 	traceProvider := trace.NewTracerProvider(
 		trace.WithBatcher(traceExporter, //TODO Batcherってなんだよ
-			// Default is 5s. Set to 1s for demonstrative purposes.
 			trace.WithBatchTimeout(time.Second)),
+		trace.WithResource(r),
 	)
 	return traceProvider, nil
 }
 
 // Metrics用のプロバイダ
 func newMeterProvider(ctx context.Context, conn *grpc.ClientConn) (*metric.MeterProvider, error) {
-	// metricExporter, err := stdoutmetric.New()
-	// if err != nil {
-	// 	return nil, err
-	// }
+
+	r, err := newResouce()
+
+	if err != nil {
+		return nil, err
+	}
 
 	metricExporter, err := otlpmetricgrpc.New(ctx, otlpmetricgrpc.WithGRPCConn(conn))
 	if err != nil {
@@ -130,9 +142,22 @@ func newMeterProvider(ctx context.Context, conn *grpc.ClientConn) (*metric.Meter
 	}
 
 	meterProvider := metric.NewMeterProvider(
+		metric.WithResource(r),
 		metric.WithReader(metric.NewPeriodicReader(metricExporter, //TODO Readerなんだ？
-			// Default is 1m. Set to 3s for demonstrative purposes.
 			metric.WithInterval(3*time.Second))),
 	)
+
 	return meterProvider, nil
+}
+
+func newResouce() (*resource.Resource, error) {
+
+	r, err := resource.Merge(
+		resource.Default(),
+		resource.NewWithAttributes(
+			semconv.SchemaURL,
+			semconv.ServiceName(os.Getenv("SERVICE_NAME")), // サービス名の設定
+		),
+	)
+	return r, err
 }

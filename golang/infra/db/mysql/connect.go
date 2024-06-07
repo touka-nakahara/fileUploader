@@ -19,12 +19,13 @@ func Connect() (*sql.DB, error) {
 		User:                 os.Getenv("DB_USER"),
 		Passwd:               os.Getenv("DB_PASSWORD"),
 		Net:                  "tcp",
-		Addr:                 os.Getenv("DB_ADDRESS"),
+		Addr:                 os.Getenv("DB_ADDRESS") + ":" + os.Getenv("DB_PORT"),
 		ParseTime:            true,
 		AllowNativePasswords: true,
+		InterpolateParams:    true,
 	}
 
-	db, err := otelsql.Open("mysql", c.FormatDSN(), otelsql.WithAttributes(semconv.DBSystemMySQL))
+	db, err := otelsql.Open("mysql", c.FormatDSN(), otelsql.WithAttributes(semconv.DBSystemMySQL), otelsql.WithSQLCommenter(true))
 	if err != nil {
 		return nil, err
 	}
