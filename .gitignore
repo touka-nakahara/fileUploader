@@ -6,3 +6,4 @@ golang/log/*.log
 /golang/fake
 
 /k6/sample/
+/sql/log
