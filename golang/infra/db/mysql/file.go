@@ -163,7 +163,15 @@ func (d *fileDB) Get(ctx context.Context, id model.FileID) (*model.File, error) 
 func (d *fileDB) GetData(ctx context.Context, id model.FileID, uuid string) (*model.FileBlob, error) {
 
 	localPath := os.Getenv("FILE_DIR")
-	data, err := os.ReadFile(localPath + "/" + uuid)
+
+	var data []byte
+	var err error
+	func() {
+		_, span := trace.SpanFromContext(ctx).TracerProvider().Tracer("os.ReadFile").Start(ctx, "os.ReadFile")
+		defer span.End()
+		data, err = os.ReadFile(localPath + "/" + uuid)
+	}()
+
 	if err != nil {
 		return nil, err
 	}

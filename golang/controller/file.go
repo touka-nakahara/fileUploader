@@ -5,9 +5,14 @@ import (
 	errorHandle "fileUploader/controller/error"
 	"fileUploader/model"
 	"fileUploader/service"
+	"fmt"
 	"io"
+	"log"
+	"mime"
+	"mime/multipart"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
@@ -123,6 +128,7 @@ func (c *fileController) PostFileHandler(w http.ResponseWriter, r *http.Request)
 	ctx := r.Context()
 	ctx, span := trace.SpanFromContext(ctx).TracerProvider().Tracer("PostFileHandler").Start(ctx, "PostFileHandler")
 	defer span.End()
+	span.AddEvent("start handle")
 
 	type Message struct {
 		File model.File     `json:"file"`
@@ -133,16 +139,34 @@ func (c *fileController) PostFileHandler(w http.ResponseWriter, r *http.Request)
 	MaxUploadSize := c.config.MaxUploadSize
 
 	// ファイルサイズを制限
+	span.AddEvent("Parse MultipartForm")
 	r.Body = http.MaxBytesReader(w, r.Body, MaxUploadSize)
-	if err := r.ParseMultipartForm(MaxUploadSize); err != nil {
-		// Deadline Exceeded Error 発生可能性あり
-		errorHandle.ErrorHandler(w, r, errorHandle.ErrTooLarge)
-		return
+
+	mediaType, params, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil {
+		log.Fatal(err)
 	}
+
+	if strings.HasPrefix(mediaType, "multipart/") {
+		mr := multipart.NewReader(r.Body, params["boundary"])
+		for {
+			p, err := mr.NextPart()
+			if err == io.EOF {
+				return
+			}
+			if err != nil {
+				log.Fatal(err)
+			}
+			fmt.Println(p.Header)
+		}
+
+	}
+
+	span.AddEvent("End parse")
 
 	// ファイルメタデータの読み取り
 	file := r.FormValue("file")
-	err := json.Unmarshal([]byte(file), &m.File)
+	err = json.Unmarshal([]byte(file), &m.File)
 	if err != nil {
 		errorHandle.ErrorHandler(w, r, err)
 	}
@@ -257,5 +281,7 @@ func (c *fileController) GetFileDownloadHandler(w http.ResponseWriter, r *http.R
 	var res model.Response = model.Response{
 		Data: fileData,
 	}
+	span.AddEvent("encode Json")
 	json.NewEncoder(w).Encode(res)
+	span.AddEvent("end encoding")
 }

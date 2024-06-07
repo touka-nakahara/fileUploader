@@ -30,6 +30,10 @@ func Connect() (*sql.DB, error) {
 		return nil, err
 	}
 
+	db.SetMaxOpenConns(100)
+	db.SetMaxIdleConns(80)
+	db.SetConnMaxIdleTime(30 * time.Second)
+
 	//　接続
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
