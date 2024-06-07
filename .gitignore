@@ -2,3 +2,7 @@
 /react/package-lock.json
 
 golang/log/*.log
+/golang/infra/db/local/
+/golang/fake
+
+/k6/sample/

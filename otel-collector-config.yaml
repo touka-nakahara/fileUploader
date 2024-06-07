@@ -5,7 +5,12 @@ receivers:
         endpoint: 0.0.0.0:4317 #TODO localhostに変更可能
 
 processors:
+  memory_limiter:
+    check_interval: 1s # 測定感覚
+    limit_mib: 4000 # ハードメモリ制限
+    spike_limit_mib: 800 # 最大スパイク
   batch:
+
 
 exporters:
   prometheus:
@@ -23,9 +28,9 @@ service:
   pipelines:
     metrics:
       receivers: [otlp]
-      processors: []
+      processors: [memory_limiter, batch]
       exporters: [prometheus, debug]
     traces:
       receivers: [otlp]
-      processors: []
+      processors: [memory_limiter, batch]
       exporters: [otlp, debug]

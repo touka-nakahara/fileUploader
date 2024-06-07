@@ -1,0 +1,112 @@
+/usr/sbin/mysqld, Version: 8.4.0 (MySQL Community Server - GPL). started with:
+Tcp port: 0  Unix socket: /var/run/mysqld/mysqld.sock
+Time                 Id Command    Argument
+/usr/sbin/mysqld, Version: 8.4.0 (MySQL Community Server - GPL). started with:
+Tcp port: 0  Unix socket: /var/run/mysqld/mysqld.sock
+Time                 Id Command    Argument
+/usr/sbin/mysqld, Version: 8.4.0 (MySQL Community Server - GPL). started with:
+Tcp port: 3306  Unix socket: /var/run/mysqld/mysqld.sock
+Time                 Id Command    Argument
+# Time: 2024-06-07T05:01:58.120560Z
+# User@Host: root[root] @  [192.168.65.1]  Id:    85
+# Query_time: 0.852590  Lock_time: 0.000179 Rows_sent: 20  Rows_examined: 58
+use mysql;
+SET timestamp=1717736517;
+SELECT id, name, size, extension, description, uuid, password, thumbnail, is_available, update_date, upload_date FROM file.Metadata WHERE is_available > NOW() order by update_date desc limit 20 /*traceparent='00-529e51a4681a28d1117609816f6bf0d6-d8f0122dac1d00cf-01'*/;
+# Time: 2024-06-07T05:02:02.941779Z
+# User@Host: root[root] @  [192.168.65.1]  Id:    81
+# Query_time: 0.680912  Lock_time: 0.000000 Rows_sent: 0  Rows_examined: 0
+SET timestamp=1717736522;
+COMMIT;
+# Time: 2024-06-07T05:02:03.077687Z
+# User@Host: root[root] @  [192.168.65.1]  Id:    86
+# Query_time: 0.820021  Lock_time: 0.000000 Rows_sent: 0  Rows_examined: 0
+SET timestamp=1717736522;
+COMMIT;
+# Time: 2024-06-07T05:02:03.086853Z
+# User@Host: root[root] @  [192.168.65.1]  Id:    73
+# Query_time: 0.815152  Lock_time: 0.000000 Rows_sent: 0  Rows_examined: 0
+SET timestamp=1717736522;
+COMMIT;
+# Time: 2024-06-07T05:02:05.412484Z
+# User@Host: root[root] @  [192.168.65.1]  Id:   100
+# Query_time: 1.418522  Lock_time: 0.000005 Rows_sent: 0  Rows_examined: 0
+SET timestamp=1717736523;
+INSERT INTO file.Metadata (
+			name, size, extension, description, uuid, password, thumbnail
+		) VALUES ('fakefile_100.dummy', 104857600, 'dummy', 'fbwqinnbhiddrroxnpzkdxrmgzecktcdkekyilvzdhpefrexmmtgcqgdvadyzviwhdwpdzgyegpimlgewbffj', '22548bb8-2070-4ebd-8337-72a2bc147481', '$argon2id$v=19$m=65536,t=1,p=4$bWnx2sFakzAvWqJur0REcA$an6AdeJQ5u9hh5R8OFxk0YB+f24x15cFIxBpGCyh3iI', NULL) /*traceparent='00-7836cd3e8b59a12881024cec218e2a76-ebe17336221f69c5-01'*/;
+# Time: 2024-06-07T05:02:06.847823Z
+# User@Host: root[root] @  [192.168.65.1]  Id:    94
+# Query_time: 2.988492  Lock_time: 0.000000 Rows_sent: 0  Rows_examined: 0
+SET timestamp=1717736523;
+COMMIT;
+# Time: 2024-06-07T05:02:06.871411Z
+# User@Host: root[root] @  [192.168.65.1]  Id:    85
+# Query_time: 2.932574  Lock_time: 0.000000 Rows_sent: 0  Rows_examined: 0
+SET timestamp=1717736523;
+COMMIT;
+# Time: 2024-06-07T05:02:06.871738Z
+# User@Host: root[root] @  [192.168.65.1]  Id:    81
+# Query_time: 1.446905  Lock_time: 0.000000 Rows_sent: 0  Rows_examined: 0
+SET timestamp=1717736525;
+COMMIT;
+# Time: 2024-06-07T05:02:06.871795Z
+# User@Host: root[root] @  [192.168.65.1]  Id:   101
+# Query_time: 1.460484  Lock_time: 0.000000 Rows_sent: 0  Rows_examined: 0
+SET timestamp=1717736525;
+COMMIT;
+# Time: 2024-06-07T05:02:06.873169Z
+# User@Host: root[root] @  [192.168.65.1]  Id:    98
+# Query_time: 1.463604  Lock_time: 0.000000 Rows_sent: 0  Rows_examined: 0
+SET timestamp=1717736525;
+COMMIT;
+# Time: 2024-06-07T05:02:06.873694Z
+# User@Host: root[root] @  [192.168.65.1]  Id:    87
+# Query_time: 1.478886  Lock_time: 0.000000 Rows_sent: 0  Rows_examined: 0
+SET timestamp=1717736525;
+COMMIT;
+# Time: 2024-06-07T05:02:06.874027Z
+# User@Host: root[root] @  [192.168.65.1]  Id:    99
+# Query_time: 1.478953  Lock_time: 0.000000 Rows_sent: 0  Rows_examined: 0
+SET timestamp=1717736525;
+COMMIT;
+# Time: 2024-06-07T05:02:06.875132Z
+# User@Host: root[root] @  [192.168.65.1]  Id:   103
+# Query_time: 2.881168  Lock_time: 0.000000 Rows_sent: 0  Rows_examined: 0
+SET timestamp=1717736523;
+COMMIT;
+# Time: 2024-06-07T05:02:15.331728Z
+# User@Host: root[root] @  [192.168.65.1]  Id:   108
+# Query_time: 4.537851  Lock_time: 0.001326 Rows_sent: 1  Rows_examined: 1
+SET timestamp=1717736530;
+SELECT id, name, size, extension, description, uuid, password,  thumbnail, is_available, update_date, upload_date FROM file.Metadata WHERE id = 14 /*traceparent='00-3a45e598e61c72a933129863734b3d70-910313767e665dc8-01'*/;
+# Time: 2024-06-07T05:02:16.360845Z
+# User@Host: root[root] @  [192.168.65.1]  Id:    94
+# Query_time: 0.985868  Lock_time: 0.000000 Rows_sent: 0  Rows_examined: 0
+SET timestamp=1717736535;
+COMMIT;
+# Time: 2024-06-07T05:02:18.688261Z
+# User@Host: root[root] @  [192.168.65.1]  Id:    85
+# Query_time: 1.098132  Lock_time: 0.042824 Rows_sent: 1  Rows_examined: 1
+SET timestamp=1717736537;
+SELECT id, name, size, extension, description, uuid, password,  thumbnail, is_available, update_date, upload_date FROM file.Metadata WHERE id = 39 /*traceparent='00-07f53afa3d45ae7a24f36d7fd48c4425-04363152165e22a3-01'*/;
+# Time: 2024-06-07T05:02:38.587726Z
+# User@Host: root[root] @  [192.168.65.1]  Id:   111
+# Query_time: 2.836413  Lock_time: 0.000000 Rows_sent: 0  Rows_examined: 0
+SET timestamp=1717736555;
+COMMIT;
+# Time: 2024-06-07T05:02:51.651829Z
+# User@Host: root[root] @  [192.168.65.1]  Id:   127
+# Query_time: 0.925420  Lock_time: 0.000000 Rows_sent: 0  Rows_examined: 0
+SET timestamp=1717736570;
+COMMIT;
+# Time: 2024-06-07T05:02:51.654601Z
+# User@Host: root[root] @  [192.168.65.1]  Id:   111
+# Query_time: 0.928169  Lock_time: 0.000000 Rows_sent: 0  Rows_examined: 0
+SET timestamp=1717736570;
+COMMIT;
+# Time: 2024-06-07T05:03:15.650241Z
+# User@Host: root[root] @  [192.168.65.1]  Id:   127
+# Query_time: 0.692017  Lock_time: 0.000000 Rows_sent: 0  Rows_examined: 0
+SET timestamp=1717736594;
+COMMIT;

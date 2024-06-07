@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"go.opentelemetry.io/otel/trace"
 )
 
 type fileDB struct {
@@ -25,7 +27,7 @@ func NewFileDB(db *sql.DB) *fileDB {
 // 　全てのファイルを取得する
 func (d *fileDB) GetAll(ctx context.Context, params *model.GetQueryParam) ([]*model.File, error) {
 	// クエリパラメータの処理
-	query := "SELECT id, name, size, extension, description, password, thumbnail, is_available, update_date, upload_date FROM file.File"
+	query := "SELECT id, name, size, extension, description, uuid, password, thumbnail, is_available, update_date, upload_date FROM file.Metadata"
 	var conditions []string
 	var args []interface{}
 
@@ -115,6 +117,7 @@ func (d *fileDB) GetAll(ctx context.Context, params *model.GetQueryParam) ([]*mo
 			&file.Size,
 			&file.Extension,
 			&file.Description,
+			&file.Uuid,
 			&file.Password,
 			&file.Thumbnail,
 			&file.IsAvailable,
@@ -131,7 +134,7 @@ func (d *fileDB) GetAll(ctx context.Context, params *model.GetQueryParam) ([]*mo
 }
 
 func (d *fileDB) Get(ctx context.Context, id model.FileID) (*model.File, error) {
-	query := "SELECT id, name, size, extension, description, password,  thumbnail, is_available, update_date, upload_date FROM file.File WHERE id = ?"
+	query := "SELECT id, name, size, extension, description, uuid, password,  thumbnail, is_available, update_date, upload_date FROM file.Metadata WHERE id = ?"
 	row := d.connection.QueryRowContext(ctx, query, id)
 
 	file := new(model.File)
@@ -142,6 +145,7 @@ func (d *fileDB) Get(ctx context.Context, id model.FileID) (*model.File, error) 
 		&file.Size,
 		&file.Extension,
 		&file.Description,
+		&file.Uuid,
 		&file.Password,
 		&file.Thumbnail,
 		&file.IsAvailable,
@@ -181,13 +185,13 @@ func (d *fileDB) Add(ctx context.Context, file *model.File, fileData *model.File
 	}
 
 	query := `
-		INSERT INTO file.File (
-			name, size, extension, description, password, thumbnail
-		) VALUES (?, ?, ?, ?, ?, ?)`
+		INSERT INTO file.Metadata (
+			name, size, extension, description, uuid, password, thumbnail
+		) VALUES (?, ?, ?, ?, ?, ?, ?)`
 
 	result, execErr := tx.ExecContext(ctx, query,
 		file.Name, file.Size, file.Extension, file.Description,
-		file.Password, file.Thumbnail)
+		file.Uuid, file.Password, file.Thumbnail)
 
 	if execErr != nil {
 		tx.Rollback()
@@ -204,7 +208,11 @@ func (d *fileDB) Add(ctx context.Context, file *model.File, fileData *model.File
 	//TODO これはDBじゃないからなんかいい感じにしたいけど...
 	localPath := os.Getenv("FILE_DIR")
 
-	err = os.WriteFile(localPath+"/"+file.Uuid, fileData.Data, 0666)
+	func() {
+		_, span := trace.SpanFromContext(ctx).TracerProvider().Tracer("os.WriteFile").Start(ctx, "os.WriteFile")
+		defer span.End()
+		err = os.WriteFile(localPath+"/"+file.Uuid, fileData.Data, 0666)
+	}()
 	if err != nil {
 		tx.Rollback()
 		return nil, err
@@ -221,7 +229,7 @@ func (d *fileDB) Add(ctx context.Context, file *model.File, fileData *model.File
 }
 
 func (d *fileDB) Delete(ctx context.Context, id model.FileID) error {
-	query := "UPDATE file.File SET is_available=NOW() WHERE id=?;"
+	query := "UPDATE file.Metadata SET is_available=NOW() WHERE id=?;"
 
 	_, err := d.connection.ExecContext(ctx, query, id)
 
