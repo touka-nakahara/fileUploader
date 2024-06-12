@@ -5,6 +5,7 @@ import (
 	errorHandle "fileUploader/controller/error"
 	"fileUploader/model"
 	"fileUploader/service"
+	"fmt"
 	"io"
 	"log"
 	"mime"
@@ -135,11 +136,10 @@ func (c *fileController) PostFileHandler(w http.ResponseWriter, r *http.Request)
 	}
 	var m Message
 
-	MaxUploadSize := c.config.MaxUploadSize
-
 	// ファイルサイズを制限
 	span.AddEvent("Parse MultipartForm")
-	r.Body = http.MaxBytesReader(w, r.Body, MaxUploadSize)
+	// MaxUploadSize := c.config.MaxUploadSize
+	// r.Body = http.MaxBytesReader(w, r.Body, MaxUploadSize)
 
 	// io.Pipeにファイルを入れておきたい
 	mediaType, params, err := mime.ParseMediaType(r.Header.Get("Content-Type")) // params["boundary"] に boundaryが入ってる
@@ -147,15 +147,14 @@ func (c *fileController) PostFileHandler(w http.ResponseWriter, r *http.Request)
 		log.Fatal(err)
 	}
 
+	rp, wp := io.Pipe()
+
 	if strings.HasPrefix(mediaType, "multipart/") {
-		rp, wp := io.Pipe()
-		defer wp.Close()
-		defer rp.Close()
 		mr := multipart.NewReader(r.Body, params["boundary"])
 		for {
 			p, err := mr.NextPart()
 			if err == io.EOF {
-				return
+				break
 			}
 			if err != nil {
 				log.Fatal(err)
@@ -167,21 +166,21 @@ func (c *fileController) PostFileHandler(w http.ResponseWriter, r *http.Request)
 					return
 				}
 			}
-			if p.FileName() == "data" {
-				_, err := io.Copy(wp, p)
-				if err != nil {
-					errorHandle.ErrorHandler(w, r, err)
-					return
-				}
+			if p.FormName() == "data" {
+				go func() {
+					_, err := io.Copy(wp, p)
+					if err != nil {
+						fmt.Println("copy error")
+						fmt.Println(err)
+					}
+				}()
 			}
 		}
 	}
 
 	span.AddEvent("End parse")
 
-	m.Data.Data = wp
-
-	fileID, err := c.service.PostFileService(ctx, &m.File, &m.Data)
+	fileID, err := c.service.PostFileService(ctx, &m.File, rp)
 	if err != nil {
 		errorHandle.ErrorHandler(w, r, err)
 		return

@@ -6,6 +6,7 @@ import (
 	"fileUploader/model"
 	"fileUploader/repository"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -183,7 +184,7 @@ func (d *fileDB) GetData(ctx context.Context, id model.FileID, uuid string) (*mo
 	return file, nil
 }
 
-func (d *fileDB) Add(ctx context.Context, file *model.File, fileData *model.FileBlob) (*model.FileID, error) {
+func (d *fileDB) Add(ctx context.Context, file *model.File, fileData io.Reader) (*model.FileID, error) {
 	// データの実態とメタデータの保存をトランザクションで行う
 
 	tx, err := d.connection.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
@@ -213,13 +214,23 @@ func (d *fileDB) Add(ctx context.Context, file *model.File, fileData *model.File
 		return nil, err
 	}
 
-	//TODO これはDBじゃないからなんかいい感じにしたいけど...
-	localPath := os.Getenv("FILE_DIR")
+	// localPath := os.Getenv("FILE_DIR")
 
-	func() {
-		_, span := trace.SpanFromContext(ctx).TracerProvider().Tracer("os.WriteFile").Start(ctx, "os.WriteFile")
+	err = func() error {
+		_, span := trace.SpanFromContext(ctx).TracerProvider().Tracer("FileSave").Start(ctx, "FileSave")
 		defer span.End()
-		err = os.WriteFile(localPath+"/"+file.Uuid, fileData.Data, 0666)
+		dst, err := os.Create(file.Uuid)
+		if err != nil {
+			return err
+		}
+		defer dst.Close()
+
+		// ファイルコピー
+		if _, err := io.Copy(dst, fileData); err != nil {
+			return err
+		}
+
+		return nil
 	}()
 	if err != nil {
 		tx.Rollback()

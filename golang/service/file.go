@@ -10,6 +10,7 @@ import (
 	"fileUploader/model"
 	"fileUploader/repository"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -22,7 +23,7 @@ type FileService interface {
 	GetFileListService(ctx context.Context, queryParams *model.GetQueryParam) ([]*model.File, error)
 	GetFileService(ctx context.Context, fileID model.FileID) (*model.File, error)
 	GetFileDownloadService(ctx context.Context, fileID model.FileID, password string) (*model.FileBlob, error)
-	PostFileService(ctx context.Context, file *model.File, fileData *model.FileBlob) (*model.FileID, error)
+	PostFileService(ctx context.Context, file *model.File, fileData io.Reader) (*model.FileID, error)
 	DeleteFileService(ctx context.Context, fileID model.FileID, password string) error
 }
 
@@ -92,7 +93,7 @@ type Argon2Config struct {
 	KeyLength   int
 }
 
-func (s *fileService) PostFileService(ctx context.Context, file *model.File, fileData *model.FileBlob) (*model.FileID, error) {
+func (s *fileService) PostFileService(ctx context.Context, file *model.File, fileData io.Reader) (*model.FileID, error) {
 	ctx, span := trace.SpanFromContext(ctx).TracerProvider().Tracer("PostFileService").Start(ctx, "PostFileService")
 	defer span.End()
 

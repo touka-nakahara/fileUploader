@@ -45,3 +45,9 @@ type Response struct {
 type UploadResponse struct {
 	ID FileID `json:"id"`
 }
+
+type UploadRequest struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Password    string `json:"password"`
+}
