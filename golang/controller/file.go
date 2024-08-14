@@ -1,16 +1,21 @@
 package controller
 
 import (
-	"database/sql"
 	"encoding/json"
-	"errors"
+	errorHandle "fileUploader/controller/error"
 	"fileUploader/model"
 	"fileUploader/service"
+	"fmt"
 	"io"
+	"log"
+	"mime"
+	"mime/multipart"
 	"net/http"
 	"strconv"
+	"strings"
 
-	"golang.org/x/crypto/bcrypt"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type fileController struct {
@@ -31,19 +36,58 @@ func NewFileController(service service.FileService, config *FileControllerConfig
 
 // GET /files, GET/files?
 func (c *fileController) GetFileListHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	ctx, span := otel.Tracer("Test").Start(ctx, "GetFileListHandler")
+	defer span.End()
 
 	queryParams := r.URL.Query()
 
-	files, err := c.service.GetFileListService(r.Context(), queryParams)
+	// クエリパラメータ構造体に変換
+	getQueryParam := &model.GetQueryParam{}
+
+	// ファイルタイプ
+	if extension := queryParams.Get("type"); extension != "" {
+		getQueryParam.Extension = extension
+	}
+
+	// deleteParam
+	if isAvailable := queryParams.Get("is_available"); isAvailable != "" {
+		getQueryParam.Is_available = isAvailable
+	}
+
+	// searchParam
+	if searchParam := queryParams.Get("search"); searchParam != "" {
+		getQueryParam.Search = searchParam
+	}
+
+	// sort
+	if sort_name := queryParams.Get("sort"); sort_name != "" {
+		getQueryParam.Sort = sort_name
+	}
+
+	// order
+	if direction := queryParams.Get("ordered"); direction != "" {
+		getQueryParam.Ordered = direction
+	}
+
+	// page
+	if page := queryParams.Get("page"); page != "" {
+		pageInt, err := strconv.Atoi(page)
+		if err == nil {
+			getQueryParam.Page = pageInt
+		}
+	}
+
+	files, err := c.service.GetFileListService(ctx, getQueryParam)
 
 	if err != nil {
-		errorHandler(w, r, 500, service.ErrServerIntarnal.Error())
+		errorHandle.ErrorHandler(w, r, err)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
-	var res Response = Response{
+	var res model.Response = model.Response{
 		Message: "OK",
 		Data:    files,
 	}
@@ -52,39 +96,27 @@ func (c *fileController) GetFileListHandler(w http.ResponseWriter, r *http.Reque
 
 // GET /files/id
 func (c *fileController) GetFileHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	ctx, span := trace.SpanFromContext(ctx).TracerProvider().Tracer("GetFileHandler").Start(ctx, "GetFileHandler")
+	defer span.End()
 
 	pathParam := r.PathValue("id")
 	fileID, err := strconv.Atoi(pathParam)
 	if err != nil || fileID == 0 {
-		errorHandler(w, r, 400, service.ErrInvalidRequest.Error())
+		errorHandle.ErrorHandler(w, r, errorHandle.ErrInvalidRequest)
 		return
 	}
 
-	file, err := c.service.GetFileService(r.Context(), model.FileID(fileID))
+	file, err := c.service.GetFileService(ctx, model.FileID(fileID))
 	if err != nil {
-
-		// 有効期限
-		if errors.Is(err, service.ErrFileNotFound) {
-			errorHandler(w, r, 404, err.Error())
-			return
-		}
-
-		// 存在しない
-		if errors.Is(err, sql.ErrNoRows) {
-			errorHandler(w, r, 404, "ファイルが見つかりません")
-			return
-		}
-
-		// それ以外
-		errorHandler(w, r, 500, err.Error())
+		errorHandle.ErrorHandler(w, r, err)
 		return
 	}
 
 	// HTTPヘッダーの設定
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
-	var res Response = Response{
-		//RV nakaharaY これいらない？
+	var res model.Response = model.Response{
 		Message: "OK",
 		Data:    file,
 	}
@@ -93,6 +125,10 @@ func (c *fileController) GetFileHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 func (c *fileController) PostFileHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	ctx, span := trace.SpanFromContext(ctx).TracerProvider().Tracer("PostFileHandler").Start(ctx, "PostFileHandler")
+	defer span.End()
+	span.AddEvent("start handle")
 
 	type Message struct {
 		File model.File     `json:"file"`
@@ -100,56 +136,82 @@ func (c *fileController) PostFileHandler(w http.ResponseWriter, r *http.Request)
 	}
 	var m Message
 
-	MaxUploadSize := c.config.MaxUploadSize
-
 	// ファイルサイズを制限
-	r.Body = http.MaxBytesReader(w, r.Body, MaxUploadSize)
-	if err := r.ParseMultipartForm(MaxUploadSize); err != nil {
-		errorHandler(w, r, 400, "500MB以下のファイルを選択してください。")
-		return
-	}
+	span.AddEvent("Parse MultipartForm")
+	// MaxUploadSize := c.config.MaxUploadSize
+	// r.Body = http.MaxBytesReader(w, r.Body, MaxUploadSize)
 
-	// ファイルメタデータの読み取り
-	//RV nakaharaY file.File -> file.Metadata ?
-	file := r.FormValue("file")
-	err := json.Unmarshal([]byte(file), &m.File)
+	// io.Pipeにファイルを入れておきたい
+	mediaType, params, err := mime.ParseMediaType(r.Header.Get("Content-Type")) // params["boundary"] に boundaryが入ってる
 	if err != nil {
-		//RV nakaharaY ここでこけたらサーバーで直さないといけないからログとらないことまりそう
-		errorHandler(w, r, 500, err.Error())
+		log.Fatal(err)
 	}
 
-	// アップロードされたファイルの読み取り
-	data, _, err := r.FormFile("data")
+	rp, wp := io.Pipe()
+
+	if strings.HasPrefix(mediaType, "multipart/") {
+		mr := multipart.NewReader(r.Body, params["boundary"])
+		for {
+			p, err := mr.NextPart()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				log.Fatal(err)
+			}
+			if p.FormName() == "file" {
+				err := json.NewDecoder(p).Decode(&m.File)
+				if err != nil {
+					errorHandle.ErrorHandler(w, r, err)
+					return
+				}
+			}
+			if p.FormName() == "data" {
+				go func() {
+					_, err := io.Copy(wp, p)
+					if err != nil {
+						fmt.Println("copy error")
+						fmt.Println(err)
+					}
+				}()
+			}
+		}
+	}
+
+	span.AddEvent("End parse")
+
+	fileID, err := c.service.PostFileService(ctx, &m.File, rp)
 	if err != nil {
-		errorHandler(w, r, 400, "不明なファイルが送信されました")
-		return
-	}
-	defer data.Close()
-
-	fileData, err := io.ReadAll(data)
-	if err != nil {
-		//RV nakaharaY こういうところのエラーログ残ってて欲しいんだけどそうしたら中身をチェックするってことだからな〜どうしたらいいんだろう？
-		errorHandler(w, r, 400, "不明なファイルが送信されました")
+		errorHandle.ErrorHandler(w, r, err)
 		return
 	}
 
-	m.Data.Data = fileData
+	// メタデータを返す
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
 
-	if err := c.service.PostFileService(r.Context(), &m.File, &m.Data); err != nil {
-		errorHandler(w, r, 500, err.Error())
-		return
+	upResp := &model.UploadResponse{
+		ID: *fileID,
 	}
 
-	w.WriteHeader(204)
+	resp := &model.Response{
+		Message: "ok",
+		Data:    upResp,
+	}
+
+	json.NewEncoder(w).Encode(resp)
 }
 
 func (c *fileController) DeleteFileHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	ctx, span := trace.SpanFromContext(ctx).TracerProvider().Tracer("DeleteFileHandler").Start(ctx, "DeleteFileHandler")
+	defer span.End()
 
 	// どこのファイルを削除するか確認
 	pathParam := r.PathValue("id")
 	fileID, err := strconv.Atoi(pathParam)
 	if err != nil {
-		errorHandler(w, r, 400, service.ErrInvalidRequest.Error())
+		errorHandle.ErrorHandler(w, r, errorHandle.ErrInvalidRequest)
 		return
 	}
 
@@ -159,26 +221,13 @@ func (c *fileController) DeleteFileHandler(w http.ResponseWriter, r *http.Reques
 	}
 	var m Message
 	if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
-		errorHandler(w, r, 500, err.Error())
+		errorHandle.ErrorHandler(w, r, err)
 		return
 	}
 
 	// ファイルを削除
-	if err := c.service.DeleteFileService(r.Context(), model.FileID(fileID), m.Password); err != nil {
-
-		// パスワード
-		if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
-			errorHandler(w, r, 400, service.ErrUnmatchPassword.Error())
-			return
-		}
-
-		// 有効期限
-		if errors.Is(err, service.ErrFileNotFound) {
-			errorHandler(w, r, 400, err.Error())
-			return
-		}
-
-		errorHandler(w, r, 400, err.Error())
+	if err := c.service.DeleteFileService(ctx, model.FileID(fileID), m.Password); err != nil {
+		errorHandle.ErrorHandler(w, r, err)
 		return
 	}
 
@@ -187,12 +236,15 @@ func (c *fileController) DeleteFileHandler(w http.ResponseWriter, r *http.Reques
 
 // GET files/id/download
 func (c *fileController) GetFileDownloadHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	ctx, span := trace.SpanFromContext(ctx).TracerProvider().Tracer("GetFileDownloadHandler").Start(ctx, "GetFileDownloadHandler")
+	defer span.End()
 
 	// どこのファイルをダウンロードするか確認
 	pathParam := r.PathValue("id")
 	fileID, err := strconv.Atoi(pathParam)
 	if err != nil || fileID == 0 {
-		errorHandler(w, r, 400, "不明なリクエストです")
+		errorHandle.ErrorHandler(w, r, errorHandle.ErrInvalidRequest)
 		return
 	}
 
@@ -202,66 +254,25 @@ func (c *fileController) GetFileDownloadHandler(w http.ResponseWriter, r *http.R
 	}
 	var m Message
 	if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
-		errorHandler(w, r, 400, err.Error())
+		errorHandle.ErrorHandler(w, r, err)
 		return
 	}
 
 	// ファイルをダウンロードする
-	fileData, err := c.service.GetFileDownloadService(r.Context(), model.FileID(fileID), m.Password)
+	fileData, err := c.service.GetFileDownloadService(ctx, model.FileID(fileID), m.Password)
 
 	if err != nil {
-		if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
-			errorHandler(w, r, 400, "パスワードが違います")
-			return
-		}
-
-		if errors.Is(err, service.ErrFileNotFound) {
-			errorHandler(w, r, 400, err.Error())
-			return
-		}
-
-		errorHandler(w, r, 500, err.Error())
+		errorHandle.ErrorHandler(w, r, err)
 		return
 	}
 
 	// すべて成功した場合
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
-	var res Response = Response{
+	var res model.Response = model.Response{
 		Data: fileData,
 	}
+	span.AddEvent("encode Json")
 	json.NewEncoder(w).Encode(res)
-}
-
-// PUT /files/id
-func (c *fileController) PutFileHandler(w http.ResponseWriter, r *http.Request) {
-	pathParam := r.PathValue("id")
-	fileID, err := strconv.Atoi(pathParam)
-	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(400)
-		var res Response = Response{
-			Message: err.Error(), //　不明なアドレスです
-			Data:    nil,
-		}
-		json.NewEncoder(w).Encode(res)
-		return
-	}
-
-	// パラメータの取得
-	type Message struct {
-		File model.File `json:"file"`
-	}
-	var m Message
-	if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
-		errorHandler(w, r, 400, err.Error())
-		return
-	}
-
-	if err := c.service.PutFileService(r.Context(), model.FileID(fileID), &m.File); err != nil {
-		errorHandler(w, r, 400, err.Error())
-		return
-	}
-
-	w.WriteHeader(204)
+	span.AddEvent("end encoding")
 }

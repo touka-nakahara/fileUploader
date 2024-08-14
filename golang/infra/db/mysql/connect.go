@@ -6,8 +6,10 @@ import (
 	"os"
 	"time"
 
+	"github.com/XSAM/otelsql"
 	"github.com/go-sql-driver/mysql"
 	_ "github.com/go-sql-driver/mysql"
+	semconv "go.opentelemetry.io/otel/semconv/v1.18.0"
 )
 
 func Connect() (*sql.DB, error) {
@@ -17,15 +19,20 @@ func Connect() (*sql.DB, error) {
 		User:                 os.Getenv("DB_USER"),
 		Passwd:               os.Getenv("DB_PASSWORD"),
 		Net:                  "tcp",
-		Addr:                 os.Getenv("DB_ADDRESS"),
+		Addr:                 os.Getenv("DB_ADDRESS") + ":" + os.Getenv("DB_PORT"),
 		ParseTime:            true,
 		AllowNativePasswords: true,
+		InterpolateParams:    true,
 	}
 
-	db, err := sql.Open("mysql", c.FormatDSN())
+	db, err := otelsql.Open("mysql", c.FormatDSN(), otelsql.WithAttributes(semconv.DBSystemMySQL), otelsql.WithSQLCommenter(true))
 	if err != nil {
 		return nil, err
 	}
+
+	db.SetMaxOpenConns(100)
+	db.SetMaxIdleConns(80)
+	db.SetConnMaxIdleTime(30 * time.Second)
 
 	//　接続
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -33,6 +40,12 @@ func Connect() (*sql.DB, error) {
 
 	//　接続確認
 	if err := db.PingContext(ctx); err != nil {
+		return nil, err
+	}
+
+	// meter
+	err = otelsql.RegisterDBStatsMetrics(db, otelsql.WithAttributes(semconv.DBSystemMySQL))
+	if err != nil {
 		return nil, err
 	}
 

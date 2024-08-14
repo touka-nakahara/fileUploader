@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
+
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -27,25 +30,24 @@ func (lw *loggingWriter) WriteHeader(statusCode int) {
 	lw.ResponseWriter.WriteHeader(statusCode)
 }
 
-func LoggingMiddleware(next http.Handler, httpLogger *slog.Logger) http.Handler {
+func LoggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// ここで個別ログを作っていいものか...あとあとファイルオープンもここですることになるし
 
-		//RV RemoteAddrを入れるべきかはわからないが...一意にする必要があった
-		httpLogger.Info("Rquest", slog.String("method", r.Method), slog.String("uri", r.RequestURI), slog.String("RemoteAddr", r.RemoteAddr))
+		spanCtx := trace.SpanContextFromContext(r.Context())
 
 		rlw := newLoggingWriter(w)
 
+		initTime := time.Now()
 		next.ServeHTTP(rlw, r)
+		duration := time.Since(initTime)
 
-		//　こんなログ意味ないよ (^. . \)
 		defer func() {
 			if rlw.statusCode >= 500 && rlw.statusCode < 600 {
-				httpLogger.Error("Response", slog.String("status", fmt.Sprintf("%d", rlw.statusCode)), slog.String("RemoteAddr", r.RemoteAddr))
+				slog.Error("", slog.String("status", fmt.Sprintf("%d", rlw.statusCode)), slog.Duration("Duration", duration), slog.String("method", r.Method), slog.String("uri", r.RequestURI), slog.String("trace-id", spanCtx.TraceID().String()))
 			} else if rlw.statusCode >= 400 && rlw.statusCode < 500 {
-				httpLogger.Warn("Response", slog.String("status", fmt.Sprintf("%d", rlw.statusCode)), slog.String("RemoteAddr", r.RemoteAddr))
+				slog.Warn("", slog.String("status", fmt.Sprintf("%d", rlw.statusCode)), slog.Duration("Duration", duration), slog.String("method", r.Method), slog.String("uri", r.RequestURI), slog.String("trace-id", spanCtx.TraceID().String()))
 			} else {
-				httpLogger.Info("Response", slog.String("status", fmt.Sprintf("%d", rlw.statusCode)), slog.String("RemoteAddr", r.RemoteAddr))
+				slog.Info("", slog.String("status", fmt.Sprintf("%d", rlw.statusCode)), slog.Duration("Duration", duration), slog.String("method", r.Method), slog.String("uri", r.RequestURI), slog.String("trace-id", spanCtx.TraceID().String()))
 			}
 		}()
 	})

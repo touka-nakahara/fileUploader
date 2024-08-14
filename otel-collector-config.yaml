@@ -1,0 +1,36 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317 #TODO localhostに変更可能
+
+processors:
+  memory_limiter:
+    check_interval: 1s # 測定感覚
+    limit_mib: 4000 # ハードメモリ制限
+    spike_limit_mib: 800 # 最大スパイク
+  batch:
+
+
+exporters:
+  prometheus:
+    endpoint: 0.0.0.0:9090
+
+  otlp:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+
+  debug:
+    verbosity: detailed # 冗長性を持たせて出力, 設定なしだと標準出力？
+
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [prometheus, debug]
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp, debug]

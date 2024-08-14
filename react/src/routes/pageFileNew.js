@@ -63,14 +63,7 @@ export default function FileNew() {
 
     // forループにするか
     files.forEach(async (file, index) => {
-      //　パスワードを暗号化する処理
-      const salt = bcrypt.genSaltSync(10);
-
       const password = metadata[index].password;
-      let hash = "";
-      if (password != "") {
-        hash = bcrypt.hashSync(password, salt);
-      }
 
       const formData = new FormData();
 
@@ -78,7 +71,7 @@ export default function FileNew() {
 
       const fileData = {
         name: metadata[index].name,
-        password: hash,
+        password: password,
         description: metadata[index].description,
         extension: fileExtension,
         size: file.size,

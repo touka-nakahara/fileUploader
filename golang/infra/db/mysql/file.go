@@ -6,9 +6,11 @@ import (
 	"fileUploader/model"
 	"fileUploader/repository"
 	"fmt"
-	"net/url"
-	"strconv"
+	"io"
+	"os"
 	"strings"
+
+	"go.opentelemetry.io/otel/trace"
 )
 
 type fileDB struct {
@@ -24,20 +26,20 @@ func NewFileDB(db *sql.DB) *fileDB {
 }
 
 // 　全てのファイルを取得する
-func (d *fileDB) GetAll(ctx context.Context, params url.Values) ([]*model.File, error) {
+func (d *fileDB) GetAll(ctx context.Context, params *model.GetQueryParam) ([]*model.File, error) {
 	// クエリパラメータの処理
-	query := "SELECT id, name, size, extension, description, password, thumbnail, is_available, update_date, upload_date FROM file.File"
+	query := "SELECT id, name, size, extension, description, uuid, password, thumbnail, is_available, update_date, upload_date FROM file.Metadata"
 	var conditions []string
 	var args []interface{}
 
 	// ファイルタイプ
-	if extension := params.Get("type"); extension != "" {
-		conditions = append(conditions, "extension = ?")
+	if extension := params.Extension; extension != "" {
+		conditions = append(conditions, "c = ?")
 		args = append(args, extension)
 	}
 
 	// 1時間以内に削除されたものを見る
-	if isAvailable := params.Get("is_available"); isAvailable != "" {
+	if isAvailable := params.Is_available; isAvailable != "" {
 		if isAvailable == "false" {
 			conditions = append(conditions, "is_available >= DATE_SUB(NOW(), INTERVAL 1 HOUR) AND is_available <= NOW()")
 		}
@@ -46,7 +48,7 @@ func (d *fileDB) GetAll(ctx context.Context, params url.Values) ([]*model.File, 
 	}
 
 	// 検索
-	if searchParam := params.Get("search"); searchParam != "" {
+	if searchParam := params.Search; searchParam != "" {
 		conditions = append(conditions, "name LIKE ?")
 		args = append(args, "%"+searchParam+"%")
 	}
@@ -57,49 +59,44 @@ func (d *fileDB) GetAll(ctx context.Context, params url.Values) ([]*model.File, 
 	}
 
 	//　ソート
-	var sort_query string
-	if sort_name := params.Get("sort"); sort_name != "" {
+	var sortQuery string
+	if sort_name := params.Sort; sort_name != "" {
 		if sort_name == "name" || sort_name == "update_date" || sort_name == "size" {
-			sort_query += "order by" + " " + sort_name
+			sortQuery += "order by" + " " + sort_name
 		}
+	} else { // 指定しない場合はupdate_date
+		sortQuery += "order by update_date"
 	}
 
 	// オーダー
-	if direction := params.Get("ordered"); direction != "" {
+	if direction := params.Ordered; direction != "" {
 		if direction == "asc" || direction == "desc" {
-			if sort_query != "" {
-				sort_query += " " + direction
+			if sortQuery != "" {
+				sortQuery += " " + direction
 			} else {
 				// 指定していない場合は名前でソート
-				sort_query += "order by name" + " " + direction
+				sortQuery += "order by name" + " " + direction
 			}
 		}
+	} else { // 指定していない場合は降順
+		sortQuery += " " + "desc"
 	}
 
 	// クエリ結合
-	if sort_query != "" {
-		query += " " + sort_query
+	if sortQuery != "" {
+		query += " " + sortQuery
 	}
 
 	// 最大数制限
 	query += " " + "limit 20"
 
 	//　ページ
-	//RV nakaharaY クエリ処理はここではなくて別のところで行ったほうがいい
-	//RV nakaharaY ページで見つからなかった場合エラーを返したい気もしている
-	if page := params.Get("page"); page != "" {
-		scaler, err := strconv.Atoi(page)
-		if err != nil {
-			// return nil, err
-			return nil, fmt.Errorf("page param type should be number but actual %s", page)
-		}
-		offset := (scaler - 1) * 20
+	if page := params.Page; page != 0 {
+		offset := (page - 1) * 20
 
 		query += fmt.Sprintf(" offset %d", offset)
 	}
 
-	// クエリ実行
-	//TODO カラム総数, タイプを取得して返したい
 	rows, err := d.connection.QueryContext(
 		ctx,
 		query,
@@ -121,6 +118,7 @@ func (d *fileDB) GetAll(ctx context.Context, params url.Values) ([]*model.File, 
 			&file.Size,
 			&file.Extension,
 			&file.Description,
+			&file.Uuid,
 			&file.Password,
 			&file.Thumbnail,
 			&file.IsAvailable,
@@ -137,7 +135,7 @@ func (d *fileDB) GetAll(ctx context.Context, params url.Values) ([]*model.File, 
 }
 
 func (d *fileDB) Get(ctx context.Context, id model.FileID) (*model.File, error) {
-	query := "SELECT id, name, size, extension, description, password,  thumbnail, is_available, update_date, upload_date FROM file.File WHERE id = ?"
+	query := "SELECT id, name, size, extension, description, uuid, password,  thumbnail, is_available, update_date, upload_date FROM file.Metadata WHERE id = ?"
 	row := d.connection.QueryRowContext(ctx, query, id)
 
 	file := new(model.File)
@@ -148,6 +146,7 @@ func (d *fileDB) Get(ctx context.Context, id model.FileID) (*model.File, error) 
 		&file.Size,
 		&file.Extension,
 		&file.Description,
+		&file.Uuid,
 		&file.Password,
 		&file.Thumbnail,
 		&file.IsAvailable,
@@ -162,76 +161,94 @@ func (d *fileDB) Get(ctx context.Context, id model.FileID) (*model.File, error) 
 	return file, nil
 }
 
-func (d *fileDB) GetData(ctx context.Context, id model.FileID) (*model.FileBlob, error) {
-	query := "SELECT id, data FROM file.Data WHERE file_id = ?"
+func (d *fileDB) GetData(ctx context.Context, id model.FileID, uuid string) (*model.FileBlob, error) {
 
-	row := d.connection.QueryRowContext(ctx, query, id)
+	localPath := os.Getenv("FILE_DIR")
 
-	file := new(model.FileBlob)
-	err := row.Scan(
-		&file.ID,
-		&file.Data,
-	)
+	var data []byte
+	var err error
+	func() {
+		_, span := trace.SpanFromContext(ctx).TracerProvider().Tracer("os.ReadFile").Start(ctx, "os.ReadFile")
+		defer span.End()
+		data, err = os.ReadFile(localPath + "/" + uuid)
+	}()
 
 	if err != nil {
 		return nil, err
 	}
 
+	file := new(model.FileBlob)
+	file.ID = id
+	file.Data = data
+
 	return file, nil
 }
 
-func (d *fileDB) Add(ctx context.Context, file *model.File, fileData *model.FileBlob) error {
-
+func (d *fileDB) Add(ctx context.Context, file *model.File, fileData io.Reader) (*model.FileID, error) {
 	// データの実態とメタデータの保存をトランザクションで行う
+
 	tx, err := d.connection.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
 
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	query := `
-		INSERT INTO file.File (
-			name, size, extension, description, password, thumbnail
-		) VALUES (?, ?, ?, ?, ?, ?)`
+		INSERT INTO file.Metadata (
+			name, size, extension, description, uuid, password, thumbnail
+		) VALUES (?, ?, ?, ?, ?, ?, ?)`
 
 	result, execErr := tx.ExecContext(ctx, query,
 		file.Name, file.Size, file.Extension, file.Description,
-		file.Password, file.Thumbnail)
+		file.Uuid, file.Password, file.Thumbnail)
 
 	if execErr != nil {
 		tx.Rollback()
-		return err
+		return nil, err
 	}
 
 	id, err := result.LastInsertId()
 
 	if err != nil {
 		tx.Rollback()
-		return err
+		return nil, err
 	}
 
-	query = `
-		INSERT INTO file.Data (
-			file_id, data
-		) VALUES (?, ?)`
+	// localPath := os.Getenv("FILE_DIR")
 
-	_, execErr = tx.ExecContext(ctx, query, id, fileData.Data)
+	err = func() error {
+		_, span := trace.SpanFromContext(ctx).TracerProvider().Tracer("FileSave").Start(ctx, "FileSave")
+		defer span.End()
+		dst, err := os.Create(file.Uuid)
+		if err != nil {
+			return err
+		}
+		defer dst.Close()
 
-	if execErr != nil {
+		// ファイルコピー
+		if _, err := io.Copy(dst, fileData); err != nil {
+			return err
+		}
+
+		return nil
+	}()
+	if err != nil {
 		tx.Rollback()
-		return err
+		return nil, err
 	}
 
 	//　トランザクション実行
 	if err := tx.Commit(); err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	fileID := model.FileID(id)
+
+	return &fileID, nil
 }
 
 func (d *fileDB) Delete(ctx context.Context, id model.FileID) error {
-	query := "UPDATE file.File SET is_available=NOW() WHERE id=?;"
+	query := "UPDATE file.Metadata SET is_available=NOW() WHERE id=?;"
 
 	_, err := d.connection.ExecContext(ctx, query, id)
 
@@ -239,38 +256,5 @@ func (d *fileDB) Delete(ctx context.Context, id model.FileID) error {
 		return err
 	}
 
-	return nil
-}
-
-// RV nakaharaY PUTにするにしてはmodel.Fileはオーバースペックのような気がする
-// TODO 実装する
-func (d *fileDB) Put(ctx context.Context, id model.FileID, file *model.File) error {
-	query := "UPDATE file.File"
-	var conditions []string
-	var args []interface{}
-	//　クエリの作成
-	if file.Name != "" {
-		conditions = append(conditions, "name = ?")
-		args = append(args, file.Name)
-	}
-	if file.Password != "" {
-		conditions = append(conditions, "password = ?")
-		args = append(args, file.Password)
-	}
-	if file.Description != "" {
-		conditions = append(conditions, "description = ?")
-		args = append(args, file.Description)
-	}
-
-	if len(conditions) > 0 {
-		query += " SET " + strings.Join(conditions, " , ")
-	}
-	//TODO UPDATEだけど何も変化がない場合
-
-	_, err := d.connection.ExecContext(ctx, query, args...)
-
-	if err != nil {
-		return err
-	}
 	return nil
 }
